@@ -12,7 +12,7 @@ from datasets import load_dataset
 ds = load_dataset("smurty/NNetNav-6k")
 ```
 
-If you want to generate your own synthetic demonstrations and learn how to use the finetuning code, read on!
+If you want to generate your own synthetic demonstrations for websites, and train your own web agents, then read on!
 
 ## Table of Contents
 
