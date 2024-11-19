@@ -8,7 +8,6 @@ If you just want the NNetNav-6k dataset, you can download it via huggingface:
 
 ```python
 from datasets import load_dataset
-
 ds = load_dataset("smurty/NNetNav-6k")
 ```
 
