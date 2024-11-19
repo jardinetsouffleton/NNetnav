@@ -4,6 +4,16 @@
 <img src="assets/nnetnav_fig.png" alt="NNetNav overview" title="Overview of NNetscape Navigator" width="600">
 </div>
 
+If you just want the NNetNav-6k dataset, you can download it via huggingface:
+
+```python
+from datasets import load_dataset
+
+ds = load_dataset("smurty/NNetNav-6k")
+```
+
+If you want to generate your own synthetic demonstrations and learn how to use the finetuning code, read on!
+
 ## Table of Contents
 
 - [Project Structure](#project-structure)
