@@ -61,7 +61,6 @@ NnetscapeNavigator/
 ├── requirements.txt             # Dependencies
 └── README.md
 ```
----
 
 ## Environment Setup
 
@@ -77,7 +76,6 @@ This codebase uses two environments, MiniWoB++ and WebArena. For setup instructi
 
 If you run into issues with either setup, please open an issue on the respective repostories. Note that correctly setting up environments is a pre-requisite for the rest of the code
 
----
 ## Environment variables
 
 Make sure the following environment variables have been set up:
@@ -102,7 +100,6 @@ vllm serve --model meta-llama/Meta-Llama-3-8B-Instruct --api-key smurty-llama-8b
 ```
 and then set `LLAMA_API_KEY=smurty-llama-8b-instruct`. 
 
----
 ## Collecting demonstrations
 
 The starting point for running NNetNav is src/run_nnetnav.py. Here's how to run it:
@@ -137,7 +134,7 @@ python src/postprocess_trajectories.py \
 ```
 
 This will give you demonstrations saved in DATA_NNETNAV. If you're using a vLLM endpoint (e.g. meta-llama/Meta-Llama-3-8B-Instruct), replace `gpt-4o-mini` with `meta-llama/Meta-Llama-3-8B-Instruct`.
----
+
 ## Postprocessing for Supervised Finetuning
 
 Next, we convert demonstrations into (input, output) pairs for an LLM agent. The following will create a data.jsonl file that can be directly used for supervised finetuning!
@@ -148,7 +145,6 @@ python scripts/convert_to_sft.py \
   --output_dir finetuning/data/processed/my_nnetnav_data
 ```
 
----
 ## SFT-ing LLama with NNetNav demonstrations
 If you correctly followed all the steps till now, you should be able to train your own local LLama web-agent. To do this, first `cd finetuning`. Then, launch
 
@@ -158,7 +154,6 @@ If you correctly followed all the steps till now, you should be able to train yo
 
 And let the GPUs go brr. The script is configured for my personal setup. Feel free to modify it for your own setup (e.g. change `CUDA_VISIBLE_DEVICES` and `NUM_GPUS` and `output_dir`).
 
----
 ## Evaluating a trained agent
 First, launch a vLLM server with the new local llama model
 
@@ -176,12 +171,10 @@ python evaluation/eval_webarena.py \
     --test_end_idx 800
 ```
 
----
 ## Contributing
 
 Contributions are welcome! If you encounter any issues, feel free to open a GitHub issue or submit a pull request.
 
----
 
 ## Citation
 
