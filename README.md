@@ -1,4 +1,6 @@
 # NNetscape Navigator: Complex Demonstrations for Web Agents Without a Demonstrator
+[<a href="https://arxiv.org/abs/2410.02907">Paper</a>] 
+
 
 <div align="center">
 <img src="assets/nnetnav_fig.png" alt="NNetNav overview" title="Overview of NNetscape Navigator" width="600">
@@ -12,6 +14,13 @@ ds = load_dataset("smurty/NNetNav-6k")
 ```
 
 If you want to generate your own synthetic demonstrations for websites, and train your own web agents, then read on!
+
+## TODOs
+- [ ] Add support for collecting synthetic demonstrations on live websites.
+- [ ] Release pre-trained LLama-8b web-agents
+
+## News
+- [11/18/2024]: Github repo released, along with NNetNav-6k dataset.
 
 ## Table of Contents
 
