@@ -1,0 +1,7 @@
+tqdm
+openai
+gymnasium
+bs4
+browsergym
+distributed
+browsergym-miniwob
