@@ -17,14 +17,130 @@ import gymnasium as gym
 from bs4 import BeautifulSoup
 
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str
+from browsergym.core.action.highlevel import HighLevelActionSet
 
 from agent import PromptAgent
+from agent.prompts import *
+from agent import PromptAgent, InstructionGenerator
 
 from browser_env import ActionTypes, Action, create_stop_action
 from browser_env.actions import is_equivalent
-from browser_env.helper_functions import get_action_description
+from browser_env.helper_functions import (
+    get_action_description,
+    get_action_description_bgym,
+)
 from browser_env.auto_login import get_site_comb_from_filepath
 from distributed import LocalCluster, Client
+
+
+def get_changelog_model(args, only_path=False):
+    if args.environment_type in ["webarena", "openweb"]:
+        state_changelog_prompt = "src/agent/prompts/jsons/p_state_changelog.json"
+    elif args.environment_type == "miniwob":
+        state_changelog_prompt = (
+            "src/agent/prompts/jsons_miniwob/p_state_changelog.json"
+        )
+    else:
+        raise ValueError(f"Unknown environment type: {args.environment_type}")
+    llm_config = lm_config.construct_llm_config(args)
+    with open(state_changelog_prompt, "r") as f:
+        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
+    tokenizer = Tokenizer(args.provider, args.model)
+    prompt_constructor = eval(constructor_type)(
+        state_changelog_prompt, lm_config=llm_config, tokenizer=tokenizer
+    )
+    if only_path:
+        return state_changelog_prompt
+    else:
+        changelog_model = InstructionGenerator(
+            lm_config=llm_config,
+            prompt_constructor=prompt_constructor,
+        )
+
+        return changelog_model
+
+
+def get_trajectory_relabeler(args, only_path=False):
+    if args.environment_type in ["webarena", "openweb"]:
+        relabeling_prompt = "src/agent/prompts/jsons/p_instruction_relabel.json"
+    elif args.environment_type == "miniwob":
+        relabeling_prompt = "src/agent/prompts/jsons_miniwob/p_instruction_relabel.json"
+    else:
+        raise ValueError(f"Unknown environment type: {args.environment_type}")
+    llm_config = lm_config.construct_llm_config(args)
+    tokenizer = Tokenizer(args.provider, args.model)
+    with open(relabeling_prompt, "r") as f:
+        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
+    prompt_constructor = eval(constructor_type)(
+        relabeling_prompt, lm_config=llm_config, tokenizer=tokenizer
+    )
+    if only_path:
+        return relabeling_prompt
+    else:
+        relabeling_model = InstructionGenerator(
+            lm_config=llm_config,
+            prompt_constructor=prompt_constructor,
+        )
+        return relabeling_model
+
+
+def get_reward_model(args, only_path=False):
+    llm_config = lm_config.construct_llm_config(args)
+    if args.environment_type in ["webarena", "openweb"]:
+        reward_prompt = "src/agent/prompts/jsons/p_reward_lenient.json"
+    elif args.environment_type == "miniwob":
+        reward_prompt = "src/agent/prompts/jsons_miniwob/p_reward_lenient.json"
+    else:
+        raise ValueError(f"Unknown environment type: {args.environment_type}")
+    if only_path:
+        return reward_prompt
+    with open(reward_prompt) as f:
+        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
+    tokenizer = Tokenizer(args.provider, args.model)
+    prompt_constructor = eval(constructor_type)(
+        reward_prompt, lm_config=llm_config, tokenizer=tokenizer
+    )
+    reward_model = InstructionGenerator(
+        lm_config=llm_config,
+        prompt_constructor=prompt_constructor,
+    )
+    return reward_model
+
+
+def get_exploration_policy(args, only_path=False):
+    llm_config = lm_config.construct_llm_config(args)
+    if args.environment_type in ["webarena", "openweb"]:
+        json_dir = "src/agent/prompts/jsons_bgym"
+    elif args.environment_type == "miniwob":
+        json_dir = "src/agent/prompts/jsons_miniwob"
+    else:
+        raise ValueError(f"Unknown environment type: {args.environment_type}")
+
+    if args.use_personas:
+        zero_shot_policy_prompt = (
+            "{}/p_cot_exploration_with_history_persona.json".format(json_dir)
+        )
+    else:
+        zero_shot_policy_prompt = "{}/p_cot_exploration_with_history.json".format(
+            json_dir
+        )
+    with open(zero_shot_policy_prompt) as f:
+        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
+    tokenizer = Tokenizer(args.provider, args.model)
+    prompt_constructor = eval(constructor_type)(
+        zero_shot_policy_prompt, lm_config=llm_config, tokenizer=tokenizer
+    )
+
+    if only_path:
+        return zero_shot_policy_prompt
+    else:
+        base_agent = PromptAgent(
+            action_set_tag=args.action_set_tag,
+            lm_config=llm_config,
+            prompt_constructor=prompt_constructor,
+        )
+
+        return base_agent
 
 
 def get_url(url_name):
@@ -567,12 +683,32 @@ class NNetscapeNavigator:
         config_json = json.load(open(config_file))
         config_file_dir = os.path.dirname(config_file)
         intent = config_json["intent"]
-        if config_json.get("env_type", "webarena") == "webarena":
+        env_type = config_json.get("env_type", "webarena")
+        if env_type == "webarena":
             env_type = "webarena"
             config_file_tmp = setup_config(env, config_file)
             obs, info = env.reset(options={"config_file": config_file_tmp})
-        else:
+        elif env_type == "open_ended":
+            assert (
+                "start_url" in config_json
+            ), "start_url is required for open_ended task"
+            start_url = config_json["start_url"]
             env_type = config_json["env_type"]
+            action_set = HighLevelActionSet("webarena")
+            env = gym.make(
+                "browsergym/openended",
+                task_kwargs={"start_url": start_url},
+                wait_for_user_message=False,
+                action_mapping=action_set.to_python_code,
+            )
+            obs, info = env.reset()
+            observation_constructor = get_axtree
+            obs["text"] = observation_constructor(obs)
+            info["observation_metadata"] = {
+                "text": {"obs_nodes_info": obs["axtree_object"]}
+            }
+            config_file_tmp = config_file
+        else:
             env = gym.make(
                 "browsergym/{}".format(config_json["task"]),
             )
@@ -652,9 +788,33 @@ class NNetscapeNavigator:
                         else None
                     ),
                 )
+            elif env_type == "open_ended":
+                action_str = None  # need to do something here
+                # get all bids
+                all_bids = [
+                    o
+                    for o in state_info["observation"]["axtree_object"]["nodes"]
+                    if "browsergym_id" in o
+                ]
+                bid_dict = {}
+                for o in all_bids:
+                    if "name" in o:
+                        bid_dict[o["browsergym_id"]] = o["name"]["value"]
+                    else:
+                        bid_dict[o["browsergym_id"]] = ""
+                action_str = get_action_description_bgym(
+                    action,
+                    bid_dict,
+                    action_set_tag=self.action_set_tag,
+                    prompt_constructor=(
+                        self.exploration_policy.prompt_constructor
+                        if isinstance(self.exploration_policy, PromptAgent)
+                        else None
+                    ),
+                )
+                # a bit painful but we will need to convert actions into bgym format:
             else:
                 action_str = None
-
             if action["action_type"] == ActionTypes.STOP:
                 action["parsed_response"] = "stop"
             if render_helper is not None:
@@ -666,6 +826,8 @@ class NNetscapeNavigator:
             try:
                 if env_type == "webarena":
                     obs, _, terminated, _, info = env.step(action)
+                elif env_type == "open_ended":
+                    obs, _, terminated, _, info = env.step(action["bgym_action"])
                 else:
                     obs, _, terminated, _, info = env.step(action["parsed_response"])
             except Exception as e:

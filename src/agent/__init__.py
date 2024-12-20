@@ -6,4 +6,19 @@ from .agent import (
     construct_agent,
 )
 
-__all__ = ["Agent", "TeacherForcingAgent", "PromptAgent", "construct_agent", "InstructionGenerator"]
+from .agentlab_agent import (
+    NNetNavBrowserGymAgent,
+    AgentFactory,
+    NNetNavExplorerAgent,
+    ExplorationAgentFactory,
+    LMModule,
+)
+
+__all__ = [
+    "Agent",
+    "TeacherForcingAgent",
+    "PromptAgent",
+    "construct_agent",
+    "InstructionGenerator",
+    "LMModule"
+]

@@ -13,6 +13,7 @@ from browser_env.actions import (
     create_id_based_action,
     create_none_action,
     create_playwright_action,
+    create_bgym_action,
 )
 from browser_env.utils import Observation, StateInfo
 from llms import (
@@ -23,6 +24,8 @@ from llms import (
     lm_config,
 )
 from llms.tokenizers import Tokenizer
+from dataclasses import dataclass, asdict
+from browsergym.core.action.highlevel import HighLevelActionSet
 
 
 class Agent:
@@ -193,6 +196,8 @@ class PromptAgent(Agent):
         self.prompt_constructor = prompt_constructor
         self.action_set_tag = action_set_tag
         self.total_usage = []
+        # only for Webarena
+        self.action_set = HighLevelActionSet("webarena")
 
     def set_action_set_tag(self, tag: str) -> None:
         self.action_set_tag = tag
@@ -201,7 +206,6 @@ class PromptAgent(Agent):
     def next_action(
         self, trajectory: Trajectory, intent: str, meta_data: dict[str, Any]
     ) -> Action:
-
         prompt = self.prompt_constructor.construct(trajectory, intent, meta_data)
         lm_config = self.lm_config
         n = 0
@@ -215,7 +219,7 @@ class PromptAgent(Agent):
             n += 1
             try:
                 parsed_response = self.prompt_constructor.extract_action(response)
-                if meta_data["env_type"] != "webarena":
+                if meta_data["env_type"] not in ["webarena", "open_ended"]:
                     if parsed_response == "stop":
                         action = create_id_based_action("stop")
                         action["parsed_response"] = "```stop```"
@@ -233,6 +237,8 @@ class PromptAgent(Agent):
                     else:
                         raise ValueError(f"Unknown action type {self.action_set_tag}")
                     action["raw_prediction"] = response
+                    action["parsed_response"] = parsed_response
+                    action["bgym_action"] = create_bgym_action(parsed_response)
                 break
             except ActionParsingError as e:
                 if n >= lm_config.gen_config["max_retry"]:
@@ -245,6 +251,27 @@ class PromptAgent(Agent):
 
     def reset(self, test_config_file: str) -> None:
         pass
+
+
+# a browsergym compatible agent
+class BrowserGymAgent:
+    @beartype
+    def __init__(
+        self,
+        action_set_tag: str,
+        lm_config: lm_config.LMConfig,
+        prompt_constructor: PromptConstructor,
+    ) -> None:
+        super().__init__()
+        self.lm_config = lm_config
+        self.prompt_constructor = prompt_constructor
+        self.action_set_tag = action_set_tag
+        self.total_usage = []
+        # only for Webarena
+        self.action_set = HighLevelActionSet("webarena")
+
+    def set_action_set_tag(self, tag: str) -> None:
+        self.action_set_tag = tag
 
 
 def construct_agent(args: argparse.Namespace) -> Agent:

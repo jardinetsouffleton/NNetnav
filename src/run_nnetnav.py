@@ -10,6 +10,10 @@ from nnetnav_utils import (
     RewardModelBatched,
     get_url,
     convert_html_to_jsons,
+    get_exploration_policy,
+    get_reward_model,
+    get_trajectory_relabeler,
+    get_changelog_model,
 )
 from agent import PromptAgent, InstructionGenerator
 from agent.prompts import *
@@ -17,12 +21,30 @@ import browsergym.miniwob  # register miniwob tasks as gym environments
 import gymnasium as gym
 from browser_env import ScriptBrowserEnv
 
+
 import time
 import logging
 import random
 from browser_env.helper_functions import (
     RenderHelper,
 )
+from dataclasses import dataclass
+from typing import Optional
+
+from agent import ExplorationAgentFactory
+from bgym import EnvArgs, ExpArgs
+from browsergym.core.registration import register_task
+
+# parallelize the exploration episodes
+from nnetnav_utils import make_dask_client
+from dask import delayed, compute
+from dask.diagnostics import ProgressBar
+from agentlab.agents.generic_agent.agent_configs import FLAGS_GPT_4o
+from agentlab.llm.llm_configs import CHAT_MODEL_ARGS_DICT
+from agentlab.experiments.launch_exp import run_experiments
+from webarena_openended import WebArenaOpenEnded, NNetNavOpenEndedTask
+from agentlab.experiments.launch_exp import find_incomplete, run_experiments
+
 
 LOG_FOLDER = "log_files"
 Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
@@ -120,6 +142,22 @@ def perform_demonstration_filtering(
         json.dump(demonstrations_filtered, f, indent=4)
 
 
+def _get_all_data(all_instructions):
+    task_id = 0
+    all_data = []
+    for goal, config_file in all_instructions:
+        with open(config_file, "r") as f:
+            _c = json.load(f)
+        _c["task_id"] = task_id
+        _c["intent"] = goal
+        env_type = _c.get("env_type", "webarena")
+        if env_type == "webarena":
+            _c["start_url"] = get_url(_c["start_url"])
+        all_data.append(_c)
+        task_id += 1
+    return all_data
+
+
 def _save_with_goals(all_instructions, result_dir):
     task_id = 0
     all_out_files = []
@@ -129,7 +167,9 @@ def _save_with_goals(all_instructions, result_dir):
             _c = json.load(f)
         _c["task_id"] = task_id
         _c["intent"] = goal
-        _c["start_url"] = get_url(_c["start_url"])
+        env_type = _c.get("env_type", "webarena")
+        if env_type == "webarena":
+            _c["start_url"] = get_url(_c["start_url"])
         out_file_curr = f"{result_dir}/instruction_{task_id}.json"
         all_data.append((out_file_curr, _c))
         all_out_files.append(out_file_curr)
@@ -195,13 +235,13 @@ def config():
         "--max_retry",
         type=int,
         help="max retry times to perform generations when parsing fails",
-        default=1,
+        default=3,
     )
     parser.add_argument(
         "--max_obs_length",
         type=int,
         help="when not zero, will truncate the observation to this length before feeding to the model",
-        default=1920,
+        default=16000,
     )
     parser.add_argument(
         "--model_endpoint",
@@ -218,112 +258,88 @@ def config():
         "--environment_type",
         type=str,
         default="webarena",
-        choices=[
-            "webarena",
-            "miniwob",
-        ],
+        choices=["webarena", "miniwob", "openweb"],
+    )
+
+    parser.add_argument(
+        "--url",
+        type=str,
+        default="",
+        help="If this is set, then we will collect data for this url",
+    )
+
+    parser.add_argument(
+        "--n_jobs", type=int, default=1, help="Number of parallel jobs to run"
     )
 
     args = parser.parse_args()
     return args
 
 
-def get_changelog_model(args):
-    if args.environment_type == "webarena":
-        state_changelog_prompt = "src/agent/prompts/jsons/p_state_changelog.json"
-    elif args.environment_type == "miniwob":
-        state_changelog_prompt = (
-            "src/agent/prompts/jsons_miniwob/p_state_changelog.json"
-        )
-    else:
-        raise ValueError(f"Unknown environment type: {args.environment_type}")
-    llm_config = lm_config.construct_llm_config(args)
-    with open(state_changelog_prompt, "r") as f:
-        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
-    tokenizer = Tokenizer(args.provider, args.model)
-    prompt_constructor = eval(constructor_type)(
-        state_changelog_prompt, lm_config=llm_config, tokenizer=tokenizer
-    )
-    changelog_model = InstructionGenerator(
-        lm_config=llm_config,
-        prompt_constructor=prompt_constructor,
-    )
+@dataclass
+class NNetNavExplorationJob:
+    config: dict
+    result_dir: str
+    personas: dict
+    search_obj: NNetscapeNavigator
+    state_changelog_model: InstructionGenerator
+    action_set_tag: str
+    env: Optional[ScriptBrowserEnv] = None
 
-    return changelog_model
+    def run(self):
+        _c = self.config
+        task_id = _c["task_id"]
+        env = self.env
+        search_obj = self.search_obj
+        state_changelog_model = self.state_changelog_model
+        action_set_tag = self.action_set_tag
 
+        # we can resume from a previous run by checking if the history file exists
+        conf_file = f"{self.result_dir}/instruction_{task_id}.json"
+        history_path = f"{self.result_dir}/history_{task_id}.json"
+        if os.path.exists(history_path):
+            logger.info(f"Skipping Task: {task_id}")
+            history_curr = json.load(open(history_path, "r"))
+            relabeled_instruction_dict = json.load(
+                open(f"{self.result_dir}/relabeled_instruction_{task_id}.json", "r")
+            )
+            return task_id, None, history_curr, relabeled_instruction_dict
 
-def get_trajectory_relabeler(args):
-    if args.environment_type == "webarena":
-        relabeling_prompt = "src/agent/prompts/jsons/p_instruction_relabel.json"
-    elif args.environment_type == "miniwob":
-        relabeling_prompt = "src/agent/prompts/jsons_miniwob/p_instruction_relabel.json"
-    else:
-        raise ValueError(f"Unknown environment type: {args.environment_type}")
-    llm_config = lm_config.construct_llm_config(args)
-    tokenizer = Tokenizer(args.provider, args.model)
-    with open(relabeling_prompt, "r") as f:
-        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
-    prompt_constructor = eval(constructor_type)(
-        relabeling_prompt, lm_config=llm_config, tokenizer=tokenizer
-    )
-    relabeling_model = InstructionGenerator(
-        lm_config=llm_config,
-        prompt_constructor=prompt_constructor,
-    )
-    return relabeling_model
+        render_helper = RenderHelper(_c, self.result_dir, action_set_tag)
+        # if we are using personas, we sample a persona for each episode to simulate a user
+        if self.personas is not None:
+            persona_set = []
+            for site in _c["sites"]:
+                persona_set += self.personas[site]
+            curr_persona = random.choice(persona_set)
+            persona_str = "{}: {}".format(
+                curr_persona["persona"], curr_persona["description"]
+            )
+        else:
+            persona_str = ""
+        try:
+            trajectory_curr, history_curr, relabeled_instruction_dict = search_obj(
+                env,
+                conf_file,
+                persona_str=persona_str,
+                state_changelogger=state_changelog_model,
+                logger=logger,
+                render_helper=render_helper,
+            )
+            # write history_curr and relabeled_instruction_dict to file
+            with open("{}/history_{}.json".format(args.result_dir, task_id), "w") as f:
+                json.dump(history_curr, f)
+            with open(
+                "{}/relabeled_instruction_{}.json".format(args.result_dir, task_id), "w"
+            ) as f:
+                json.dump(relabeled_instruction_dict, f)
+        except Exception as e:
+            logger.info("Error in running subtask: {}".format(e))
+            trajectory_curr = None
+            history_curr = None
+            relabeled_instruction_dict = None
 
-
-def get_reward_model(args):
-    llm_config = lm_config.construct_llm_config(args)
-    if args.environment_type == "webarena":
-        reward_prompt = "src/agent/prompts/jsons/p_reward_lenient.json"
-    elif args.environment_type == "miniwob":
-        reward_prompt = "src/agent/prompts/jsons_miniwob/p_reward_lenient.json"
-    else:
-        raise ValueError(f"Unknown environment type: {args.environment_type}")
-    with open(reward_prompt) as f:
-        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
-    tokenizer = Tokenizer(args.provider, args.model)
-    prompt_constructor = eval(constructor_type)(
-        reward_prompt, lm_config=llm_config, tokenizer=tokenizer
-    )
-    reward_model = InstructionGenerator(
-        lm_config=llm_config,
-        prompt_constructor=prompt_constructor,
-    )
-    return reward_model
-
-
-def get_exploration_policy(args):
-    llm_config = lm_config.construct_llm_config(args)
-    if args.environment_type == "webarena":
-        json_dir = "src/agent/prompts/jsons"
-    elif args.environment_type == "miniwob":
-        json_dir = "src/agent/prompts/jsons_miniwob"
-    else:
-        raise ValueError(f"Unknown environment type: {args.environment_type}")
-
-    if args.use_personas:
-        zero_shot_policy_prompt = (
-            "{}/p_cot_exploration_with_history_persona.json".format(json_dir)
-        )
-    else:
-        zero_shot_policy_prompt = "{}/p_cot_exploration_with_history.json".format(
-            json_dir
-        )
-    with open(zero_shot_policy_prompt) as f:
-        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
-    tokenizer = Tokenizer(args.provider, args.model)
-    prompt_constructor = eval(constructor_type)(
-        zero_shot_policy_prompt, lm_config=llm_config, tokenizer=tokenizer
-    )
-    base_agent = PromptAgent(
-        action_set_tag=args.action_set_tag,
-        lm_config=llm_config,
-        prompt_constructor=prompt_constructor,
-    )
-
-    return base_agent
+        return task_id, trajectory_curr, history_curr, relabeled_instruction_dict
 
 
 def run_nnetnav_exploration(args):
@@ -355,6 +371,9 @@ def run_nnetnav_exploration(args):
         elif args.environment_type == "miniwob":
             with open("src/agent/prompts/jsons_miniwob/personas.json") as f:
                 personas = json.load(f)
+        elif args.environment_type == "openweb":
+            with open("src/agent/prompts/jsons_openweb/personas.json") as f:
+                personas = json.load(f)
         else:
             raise ValueError(f"Unknown environment type: {args.environment_type}")
     else:
@@ -384,55 +403,42 @@ def run_nnetnav_exploration(args):
         all_configs = [v for _, v in all_data]
 
     # here we record some metadata for each exploration episode.
-    all_trajectories = {}
     all_history = {}
     all_relabeled = {}
+
+    all_nnetnav_jobs = []
     for _c in all_configs:
-        task_id = _c["task_id"]
-        # we can resume from a previous run by checking if the history file exists
-        conf_file = f"{args.result_dir}/instruction_{task_id}.json"
-        history_path = f"{args.result_dir}/history_{task_id}.json"
-        if os.path.exists(history_path):
-            logger.info(f"Skipping Task: {task_id}")
-            all_history[f"example_{task_id}"] = json.load(open(history_path, "r"))
-            all_relabeled[f"example_{task_id}"] = json.load(
-                open(f"{args.result_dir}/relabeled_instruction_{task_id}.json", "r")
-            )
+        curr_obj = NNetNavExplorationJob(
+            _c,
+            args.result_dir,
+            personas,
+            search_obj,
+            state_changelog_model,
+            args.action_set_tag,
+            env,
+        )
+        all_nnetnav_jobs.append(curr_obj)
+
+    if args.n_jobs > 1:
+        with ProgressBar():
+            delayed_results = []
+            for job in all_nnetnav_jobs:
+                delayed_results.append(delayed(job.run)())
+            all_results = compute(*delayed_results)
+    else:
+        all_results = [job.run() for job in all_nnetnav_jobs]
+
+    for (
+        task_id,
+        trajectory_curr,
+        history_curr,
+        relabeled_instruction_dict,
+    ) in all_results:
+        if trajectory_curr is None:
             continue
-        render_helper = RenderHelper(_c, args.result_dir, args.action_set_tag)
-        # if we are using personas, we sample a persona for each episode to simulate a user
-        if personas is not None:
-            persona_set = []
-            for site in _c["sites"]:
-                persona_set += personas[site]
-            curr_persona = random.choice(persona_set)
-            persona_str = "{}: {}".format(
-                curr_persona["persona"], curr_persona["description"]
-            )
-        else:
-            persona_str = ""
-        try:
-            trajectory_curr, history_curr, relabeled_instruction_dict = search_obj(
-                env,
-                conf_file,
-                persona_str=persona_str,
-                state_changelogger=state_changelog_model,
-                logger=logger,
-                render_helper=render_helper,
-            )
-            all_trajectories["example_{}".format(task_id)] = trajectory_curr
-            all_history["example_{}".format(task_id)] = history_curr
-            all_relabeled["example_{}".format(task_id)] = relabeled_instruction_dict
-            # write history_curr and relabeled_instruction_dict to file
-            with open("{}/history_{}.json".format(args.result_dir, task_id), "w") as f:
-                json.dump(history_curr, f)
-            with open(
-                "{}/relabeled_instruction_{}.json".format(args.result_dir, task_id), "w"
-            ) as f:
-                json.dump(relabeled_instruction_dict, f)
-        except Exception as e:
-            logger.info("Error in running subtask: {}".format(e))
-            continue
+        all_history["example_{}".format(task_id)] = history_curr
+        all_relabeled["example_{}".format(task_id)] = relabeled_instruction_dict
+
     # dump all_history and all_relabeled to result_dir
     with open("{}/state_changelogs.json".format(args.result_dir), "w") as f:
         json.dump(all_history, f)
@@ -440,39 +446,124 @@ def run_nnetnav_exploration(args):
         json.dump(all_relabeled, f)
 
 
+def run_nnetnav_exploration_bgym(args):
+    """
+    Run NNetnav exploration using browsergym + agentlab
+    """
+    if os.path.exists(args.result_dir):
+        all_exps = find_incomplete(args.result_dir, include_errors=True)
+    else:
+        # first get the prompts for the relabeling, reward and exploration policy
+        exploration_policy_prompt_path = get_exploration_policy(args, only_path=True)
+        reward_model_prompt_path = get_reward_model(args, only_path=True)
+        trajectory_labeler_prompt_path = get_trajectory_relabeler(args, only_path=True)
+        state_changelog_model_prompt_path = get_changelog_model(args, only_path=True)
+        config_list = []
+        for f in glob.glob(f"{args.seed_dir}/*.json"):
+            if "test" not in f:
+                config_list.append(f)
+        all_instructions = []
+        for _ in range(args.exploration_size_per_seed):
+            for config_file in config_list:
+                all_instructions.append(("n/a", config_file))
+        chat_model_args = CHAT_MODEL_ARGS_DICT["openai/gpt-4o-mini-2024-07-18"]
+        all_configs = _get_all_data(all_instructions)
+        if args.use_personas:
+            if args.environment_type == "webarena":
+                with open("src/agent/prompts/jsons/personas.json") as f:
+                    personas = json.load(f)
+            elif args.environment_type == "miniwob":
+                with open("src/agent/prompts/jsons_miniwob/personas.json") as f:
+                    personas = json.load(f)
+            elif args.environment_type == "openweb":
+                with open("src/agent/prompts/jsons_openweb/personas.json") as f:
+                    personas = json.load(f)
+            else:
+                raise ValueError(f"Unknown environment type: {args.environment_type}")
+        else:
+            personas = None
+        # now we create env args corresponding to these configs
+        env_args = []
+        all_exps = []
+        task_names = []
+        for idx, _c in enumerate(all_configs):
+            if args.environment_type == "webarena":
+                gym_id = f"webarena_nnetnav_openended_{idx}"
+                task_kwargs = {"config_str": json.dumps(_c), "task_id": idx}
+            elif args.environment_type == "openweb":
+                gym_id = f"openweb_nnetnav_openended_{idx}"
+                task_kwargs = {"start_url": _c["start_url"], "goal": _c["intent"]}
+            else:
+                raise ValueError(f"Unknown environment type: {args.environment_type}")
+
+            if personas is not None:
+                persona_set = []
+                for site in _c["sites"]:
+                    persona_set += personas[site]
+                curr_persona = random.choice(persona_set)
+                persona_str = "{}: {}".format(
+                    curr_persona["persona"], curr_persona["description"]
+                )
+            else:
+                persona_str = ""
+
+            agent = ExplorationAgentFactory(
+                flags=FLAGS_GPT_4o,
+                chat_model_args=chat_model_args,
+                args=args,
+                task_args=(gym_id, task_kwargs),
+                persona_str=persona_str,
+                exploration_prompt_constructor_path=exploration_policy_prompt_path,
+                change_summarizer_prompt_constructor_path=state_changelog_model_prompt_path,
+                trajectory_labeler_prompt_constructor_path=trajectory_labeler_prompt_path,
+                outcome_reward_model_prompt_constructor_path=reward_model_prompt_path,
+            )
+            env_curr = EnvArgs(task_name=gym_id, task_seed=0, max_steps=40)
+            exp_curr = ExpArgs(
+                agent_args=agent,
+                env_args=env_curr,
+                logging_level=logging.INFO,
+            )
+            all_exps.append(exp_curr)
+
+    run_experiments(args.n_jobs, all_exps, args.result_dir, "joblib", 1)
+
+
 if __name__ == "__main__":
     args = config()
     # log the log file
-    if not os.path.exists(args.result_dir):
-        os.makedirs(args.result_dir)
-    with open(os.path.join(args.result_dir, "log_files.txt"), "a+") as f:
-        f.write(f"{LOG_FILE_NAME}\n")
+    # if not os.path.exists(args.result_dir):
+    #    os.makedirs(args.result_dir)
+    # with open(os.path.join(args.result_dir, "log_files.txt"), "a+") as f:
+    #    f.write(f"{LOG_FILE_NAME}\n")
 
-    run_nnetnav_exploration(args)
-    trajectory_dict = convert_html_to_jsons(
-        args.result_dir, f"{args.result_dir}/test.raw.json"
-    )
+    run_nnetnav_exploration_bgym(args)
+    # run_nnetnav_exploration(args)
 
-    relabeling_model = get_trajectory_relabeler(args)
-    state_changelog_model = get_changelog_model(args)
-    reward_module = RewardModelBatched(get_reward_model(args))
+    # trajectory_dict = convert_html_to_jsons(
+    #    args.result_dir, f"{args.result_dir}/test.raw.json"
+    # )
 
-    relabeler_module = TrajectoryLabeler(relabeling_model, state_changelog_model)
-    relabeled_instructions, state_changelogs = relabeler_module(
-        trajectory_dict, args.result_dir, 0, logger=logger, all_endpoints=True
-    )
-    rewards = reward_module(
-        state_changelogs,
-        relabeled_instructions,
-        args.result_dir,
-        logger=logger,
-        all_endpoints=True,
-    )
+    # relabeling_model = get_trajectory_relabeler(args)
+    # state_changelog_model = get_changelog_model(args)
+    # reward_module = RewardModelBatched(get_reward_model(args))
 
-    perform_demonstration_filtering(
-        rewards,
-        relabeled_instructions,
-        trajectory_dict,
-        args.result_dir,
-        args.filter_dir,
-    )
+    # relabeler_module = TrajectoryLabeler(relabeling_model, state_changelog_model)
+    # relabeled_instructions, state_changelogs = relabeler_module(
+    #    trajectory_dict, args.result_dir, 0, logger=logger, all_endpoints=True
+    # )
+    # rewards = reward_module(
+    #    state_changelogs,
+    #    relabeled_instructions,
+    #    args.result_dir,
+    #    logger=logger,
+    #    all_endpoints=True,
+    # )
+
+    # perform_demonstration_filtering(
+    #    rewards,
+    #    relabeled_instructions,
+    #    trajectory_dict,
+    #    args.result_dir,
+    #    args.filter_dir,
+    # )
