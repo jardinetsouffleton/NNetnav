@@ -65,7 +65,7 @@ def get_action_description_bgym(
     action: Action,
     bid_meta_data: dict[str, str],
     action_set_tag: str,
-    prompt_constructor: PromptConstructor | None,
+    action_splitter: str,
 ) -> str:
     """
     A version of get_action_description that works with bgym
@@ -84,13 +84,7 @@ def get_action_description_bgym(
                 else:
                     action_str = f"Attempt to perfom \"{action_name}\" on element \"[{action['element_id']}]\" but no matching element found. Please check the observation more carefully."
             else:
-                if (
-                    action["action_type"] == ActionTypes.NONE
-                    and prompt_constructor is not None
-                ):
-                    action_splitter = prompt_constructor.instruction["meta_data"][
-                        "action_splitter"
-                    ]
+                if action["action_type"] == ActionTypes.NONE:
                     action_str = f'The previous prediction you issued was "{action["raw_prediction"]}". However, the format was incorrect. Ensure that the action is wrapped inside a pair of {action_splitter} and enclose arguments within [] as follows: {action_splitter}action [arg] ...{action_splitter}.'
                 else:
                     action_str = action2str(action, action_set_tag, "")
