@@ -13,7 +13,12 @@ import numpy as np
 from browsergym.experiments.loop import yield_all_exp_results
 
 from agent import LMModule
-from nnetnav_utils import get_reward_model, get_changelog_model, convert_to_description
+from nnetnav_utils import (
+    get_reward_model,
+    get_reward_model_full,
+    get_changelog_model,
+    convert_to_description,
+)
 
 
 from agentlab.llm.chat_api import SelfHostedModelArgs
@@ -31,7 +36,11 @@ default_oss_llms_args = {
     "n_retry_server": 4,
     "temperature": 0.01,
 }
-from agentlab.llm.chat_api import SelfHostedModelArgs, OpenRouterModelArgs
+from agentlab.llm.chat_api import (
+    SelfHostedModelArgs,
+    OpenRouterModelArgs,
+    TogetherAIModelArgs,
+)
 import json
 from llms import (
     lm_config,
@@ -101,6 +110,7 @@ def config():
         "--output_prefix", type=str, help="Output prefix for saving results"
     )
     parser.add_argument("--use_openrouter", action="store_true")
+    parser.add_argument("--use_together_ai", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--nnetnav_subset", type=int, default=10000)
     parser.add_argument(
@@ -108,6 +118,11 @@ def config():
         type=str,
         default="webarena",
         choices=["webarena", "workarena", "miniwob"],
+    )
+    parser.add_argument(
+        "--nnetnav_mode",
+        action="store_true",
+        help="Use nnetnav traces instead of webarena traces",
     )
 
     args = parser.parse_args()
@@ -155,7 +170,36 @@ def get_trajectory_summary(orig_exp_dir, change_summarizer, redo=False):
         return summary
 
 
-def run_orm(exp_arg):
+def get_trajectory_summary_nnetnav(orig_exp_dir, change_summarizer, redo=False):
+    ## the steps are
+    all_steps = pickle.load(open(f"{orig_exp_dir}/steps.pkl", "rb"))
+    if os.path.exists(f"{orig_exp_dir}/summary.pkl") and not redo:
+        summary = pickle.load(open(f"{orig_exp_dir}/summary.pkl", "rb"))
+        return summary
+    else:
+        summary = []
+        for idx in range(len(all_steps) - 1):
+            curr_step = all_steps[idx]
+            next_step = all_steps[idx + 1]
+            curr_observation = curr_step["axtree_txt"]
+            next_observation = next_step["axtree_txt"]
+            curr_action = curr_step["action"]
+            change_summary_curr = change_summarizer(
+                {
+                    "init_observation": curr_observation,
+                    "final_observation": next_observation,
+                    "action": curr_action,
+                }
+            )
+            summary.append(change_summary_curr)
+            if curr_action.startswith("stop"):
+                break
+        with open(f"{orig_exp_dir}/summary.pkl", "wb") as f:
+            pickle.dump(summary, f)
+        return summary
+
+
+def run_orm(exp_dir, is_nnetnav=False):
     # not that these flags don't really matter because we are directly using the axtree_txt objects...
     FLAGS_GPT_4o_webarena = GenericPromptFlags(
         obs=dp.ObsFlags(
@@ -196,9 +240,18 @@ def run_orm(exp_arg):
     )
 
     if args.use_openrouter:
-        # use a reasonably high temperature to get multiple trajectories
         chat_model_args = OpenRouterModelArgs(
             model_name=args.model,
+            max_total_tokens=16_384,
+            max_input_tokens=16_384 - 512,
+            max_new_tokens=512,
+            temperature=0.01,
+        ).make_model()
+    elif args.use_together_ai:
+        # use a reasonably high temperature to get multiple trajectories
+        # TogetherAI uses Turbo postfix for quantized models
+        chat_model_args = TogetherAIModelArgs(
+            model_name=f"{args.model}-Turbo",
             max_total_tokens=16_384,
             max_input_tokens=16_384 - 512,
             max_new_tokens=512,
@@ -214,7 +267,9 @@ def run_orm(exp_arg):
             **default_oss_llms_args,
         ).make_model()
 
-    reward_prompt = get_prompt_constructor(args, get_reward_model(args, only_path=True))
+    reward_prompt = get_prompt_constructor(
+        args, get_reward_model_full(args, only_path=True)
+    )
     summarizer_prompt = get_prompt_constructor(
         args, get_changelog_model(args, only_path=True)
     )
@@ -226,112 +281,75 @@ def run_orm(exp_arg):
         chat_model_args, FLAGS_GPT_4o_webarena, reward_prompt, max_retry=3
     )
 
-    orig_exp_dir = exp_arg.exp_dir
     try:
-        summary = get_trajectory_summary(orig_exp_dir, change_summarizer)
+        if is_nnetnav:
+            summary = get_trajectory_summary_nnetnav(exp_dir, change_summarizer)
+        else:
+            summary = get_trajectory_summary(exp_dir, change_summarizer)
         # get the instruction
-        instruction = pickle.load(
-            gzip.open(f"{orig_exp_dir}/goal_object.pkl.gz", "rb")
-        )[0]["text"]
+        instruction = pickle.load(gzip.open(f"{exp_dir}/goal_object.pkl.gz", "rb"))[0][
+            "text"
+        ]
         trajectory = convert_to_description([s["output"] for s in summary])
-        if os.path.exists(f"{orig_exp_dir}/reward.pkl"):
-            reward = pickle.load(open(f"{orig_exp_dir}/reward.pkl", "rb"))
+        if os.path.exists(f"{exp_dir}/reward_llama.pkl"):
+            reward = pickle.load(open(f"{exp_dir}/reward_llama.pkl", "rb"))
         else:
             reward = reward_model(
                 {"instruction": instruction, "trajectory": trajectory}
             )
-            with open(f"{orig_exp_dir}/reward.pkl", "wb") as f:
+            with open(f"{exp_dir}/reward_llama.pkl", "wb") as f:
                 pickle.dump(reward, f)
-    except:
-        print(f"Error in {orig_exp_dir}")
+    except Exception as e:
+        print(f"Error in {exp_dir}: {e}")
         reward = {"think": "", "reward": -1}
     print(reward)
     return reward
 
 
-def execute_in_parallel(exp_set):
-    """
-    exp_set is a list of lists, where each inner list is a tuple of (exp_arg, orig_trajectory)
-    """
-    delayed_funcs = []
-
-    def get_task(exp_arg_curr):
-        return delayed(run_orm)(exp_arg_curr)
-
-    for exp_arg_curr in exp_set:
-        delayed_funcs.append(get_task(exp_arg_curr))
-
-    compute(delayed_funcs)
-
-
 if __name__ == "__main__":
     args = config()
 
-    # define the reward model and change summarizer
-    FLAGS_GPT_4o_webarena = GenericPromptFlags(
-        obs=dp.ObsFlags(
-            use_html=False,
-            use_ax_tree=True,
-            use_focused_element=True,
-            use_error_logs=True,
-            use_history=True,
-            use_past_error_logs=False,
-            use_action_history=True,
-            use_think_history=False,
-            use_diff=False,
-            html_type="pruned_html",
-            use_screenshot=False,
-            use_som=False,
-            extract_visible_tag=True,
-            extract_clickable_tag=True,
-            extract_coords="False",
-            filter_visible_elements_only=False,
-        ),
-        action=dp.ActionFlags(
-            multi_actions=False,
-            action_set="webarena",
-            long_description=False,
-            individual_examples=False,
-        ),
-        use_plan=False,
-        use_criticise=False,
-        use_thinking=True,
-        use_memory=False,
-        use_concrete_example=True,
-        use_abstract_example=True,
-        use_hints=True,
-        enable_chat=False,
-        max_prompt_tokens=None,
-        be_cautious=True,
-        extra_instructions=None,
-    )
-    chat_model_args = CHAT_MODEL_ARGS_DICT["azure/gpt-4o-mini-2024-07-18"]
-
     # batched version
-    trace2dir_orig = {}
-    for fname in glob.glob(f"{args.orig_trace_dir}/*"):
-        if os.path.isdir(fname):
-            env_info = pickle.load(open(f"{fname}/exp_args.pkl", "rb")).env_args
-            task_name = env_info.task_name
-            task_id = int(env_info.task_name.split("_")[-1])
-            if task_id < args.nnetnav_subset:
-                trace2dir_orig[task_id] = fname
-        if args.debug and len(trace2dir_orig) > 10:
-            break
+    if args.nnetnav_mode:
+        exp_dirs = []
+        for fname in glob.glob(f"{args.orig_trace_dir}/*"):
+            try:
+                task_id = int(fname.split("/")[-1])
+            except:
+                continue
+            print(task_id)
+            if os.path.isdir(fname):
+                exp_dirs.append(fname)
+    else:
+        trace2dir_orig = {}
+        for fname in glob.glob(f"{args.orig_trace_dir}/*"):
+            if os.path.isdir(fname) and not fname.startswith("_"):
+                env_info = pickle.load(open(f"{fname}/exp_args.pkl", "rb")).env_args
+                task_name = env_info.task_name
+                task_id = int(env_info.task_name.split("_")[-1])
+                if task_id < args.nnetnav_subset:
+                    trace2dir_orig[task_id] = fname
+            if args.debug and len(trace2dir_orig) > 10:
+                break
 
-    exp_set = []
-    for task_id in tqdm(trace2dir_orig):
-        try:
-            exp_arg = pickle.load(
-                open("{}/exp_args.pkl".format(trace2dir_orig[task_id]), "rb")
-            )
-            exp_set.append(exp_arg)
-        except Exception as e:
-            print(f"Error in task {task_id}: {e}")
-    print("Running regular ORM for multiple tasks: ", len(exp_set))
+        exp_set = []
+        for task_id in tqdm(trace2dir_orig):
+            try:
+                exp_arg = pickle.load(
+                    open("{}/exp_args.pkl".format(trace2dir_orig[task_id]), "rb")
+                )
+                exp_set.append(exp_arg)
+            except Exception as e:
+                print(f"Error in task {task_id}: {e}")
+
+        exp_dirs = [exp_arg.exp_dir for exp_arg in exp_set]
+    print("Running regular ORM for multiple tasks: ", len(exp_dirs))
     if args.n_jobs == 1:
-        for exp_arg in exp_set:
-            run_orm(exp_arg)
+        for exp_dir in exp_dirs:
+            run_orm(exp_dir, is_nnetnav=args.nnetnav_mode)
     else:
         with Parallel(n_jobs=args.n_jobs) as parallel:
-            parallel(delayed(run_orm)(exp_arg) for exp_arg in exp_set)
+            parallel(
+                delayed(run_orm)(exp_dir, is_nnetnav=args.nnetnav_mode)
+                for exp_dir in exp_dirs
+            )

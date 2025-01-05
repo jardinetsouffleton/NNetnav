@@ -18,6 +18,7 @@ from pathlib import Path
 
 import glob
 import openai
+from collections import Counter
 
 from agent import (
     Agent,
@@ -41,10 +42,15 @@ from browser_env.helper_functions import (
     get_action_description,
 )
 
+import browsergym.webarena
+from browsergym.webarena import ALL_WEBARENA_TASK_IDS
+
 from nnetnav_utils import get_url
 import webarena_openended
+import webvoyager
 from bgym import ExpArgs, EnvArgs
 from webarena_openended import ALL_OPENENDED_WEBARENA_TASK_IDS
+from webvoyager import ALL_WEBVOYAGER_TASK_IDS
 
 from evaluation_harness import evaluator_router
 from agent import InstructionGenerator
@@ -53,7 +59,11 @@ from agentlab.experiments import args as agentlab_args
 from agentlab.experiments import study
 from agentlab.experiments.launch_exp import find_incomplete, run_experiments
 from agentlab.agents.generic_agent.agent_configs import FLAGS_GPT_4o
-from agentlab.llm.chat_api import SelfHostedModelArgs, OpenRouterModelArgs
+from agentlab.llm.chat_api import (
+    SelfHostedModelArgs,
+    OpenRouterModelArgs,
+    TogetherAIModelArgs,
+)
 
 LOG_FOLDER = "log_files"
 Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
@@ -74,12 +84,6 @@ logger.addHandler(file_handler)
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 file_handler.setFormatter(formatter)
-
-
-default_oss_llms_args = {
-    "n_retry_server": 4,
-    "temperature": 0.01,
-}
 
 
 def config() -> argparse.Namespace:
@@ -149,7 +153,6 @@ def config() -> argparse.Namespace:
     parser.add_argument("--stop_token", type=str, default=None)
     parser.add_argument("--inp_task_file", type=str, default="")
     parser.add_argument("--num_instructions", type=int, default=1)
-    parser.add_argument("--config_dir", type=str, default="config_files")
     parser.add_argument(
         "--sample_freq", type=int, default=1, help="If not 1, sample every n tasks"
     )
@@ -165,7 +168,7 @@ def config() -> argparse.Namespace:
         "--max_obs_length",
         type=int,
         help="when not zero, will truncate the observation to this length before feeding to the model",
-        default=1920,
+        default=16000,
     )
     parser.add_argument(
         "--model_endpoint",
@@ -192,8 +195,21 @@ def config() -> argparse.Namespace:
     )
     parser.add_argument("--agent_name", type=str, default="my_agent")
     parser.add_argument("--use_openrouter", action="store_true")
+    parser.add_argument("--use_together_ai", action="store_true")
     parser.add_argument(
-        "--data", type=str, default="nnetnav6k", choices=["nnetnav6k", "nnetnav1k"]
+        "--data",
+        type=str,
+        default="nnetnav6k",
+        choices=[
+            "nnetnav6k",
+            "nnetnav1k",
+            "webarena_subsampled",
+            "webarena",
+            "webvoyager",
+        ],
+    )
+    parser.add_argument(
+        "--url", type=str, default="", help="If not none, set URLs for webarena"
     )
     args = parser.parse_args()
 
@@ -207,64 +223,6 @@ def config() -> argparse.Namespace:
         )
 
     return args
-
-
-def early_stop(
-    trajectory: Trajectory, max_steps: int, thresholds: dict[str, int]
-) -> tuple[bool, str]:
-    """Check whether need to early stop"""
-
-    # reach the max step
-    num_steps = (len(trajectory) - 1) / 2
-    if num_steps >= max_steps:
-        return True, f"Reach max steps {max_steps}"
-
-    last_k_actions: list[Action]
-    action_seq: list[Action]
-
-    # Case: parsing failure for k times
-    k = thresholds["parsing_failure"]
-    last_k_actions = trajectory[1::2][-k:]  # type: ignore[assignment]
-    if len(last_k_actions) >= k:
-        if all(
-            [action["action_type"] == ActionTypes.NONE for action in last_k_actions]
-        ):
-            return True, f"Failed to parse actions for {k} times"
-
-    # Case: same action for k times
-    k = thresholds["repeating_action"]
-    last_k_actions = trajectory[1::2][-k:]  # type: ignore[assignment]
-    action_seq = trajectory[1::2]  # type: ignore[assignment]
-
-    if len(action_seq) == 0:
-        return False, ""
-
-    last_action: Action = action_seq[-1]
-
-    if last_action["action_type"] != ActionTypes.TYPE:
-        if len(last_k_actions) >= k:
-            if all([is_equivalent(action, last_action) for action in last_k_actions]):
-                return True, f"Same action for {k} times"
-
-    else:
-        # check the action sequence
-        if sum([is_equivalent(action, last_action) for action in action_seq]) >= k:
-            return True, f"Same typing action for {k} times"
-
-    return False, ""
-
-
-def create_config(response, config_file, out_dir):
-    """
-    Replaces the intent in config_file with response
-    """
-
-    with open(config_file) as f:
-        data = json.load(f)
-    data["intent"] = response
-    out_file = "{}/{}".format(out_dir, os.path.basename(config_file))
-    with open(out_file, "w") as f:
-        json.dump(data, f, indent=4)
 
 
 def convert_to_description(changelogs):
@@ -281,198 +239,22 @@ def convert_to_description(changelogs):
     return "\n\n".join(descriptions)
 
 
-def run(
-    args: argparse.Namespace,
-    agent: Agent | PromptAgent | TeacherForcingAgent,
-    config_file,
-    state_changelogger=None,
-) -> None:
-    scores = []
-    max_steps = args.max_steps
-
-    early_stop_thresholds = {
-        "parsing_failure": args.parsing_failure_th,
-        "repeating_action": args.repeating_action_failure_th,
-    }
-
-    # replace env with browsergym environment..
-    env = ScriptBrowserEnv(
-        headless=not args.render,
-        slow_mo=args.slow_mo,
-        observation_type=args.observation_type,
-        current_viewport_only=args.current_viewport_only,
-        viewport_size={
-            "width": args.viewport_width,
-            "height": args.viewport_height,
-        },
-        save_trace_enabled=args.save_trace_enabled,
-        sleep_after_execution=args.sleep_after_execution,
-    )
-
-    try:
-        with open(config_file) as f:
-            _c = json.load(f)
-            intent = _c["intent"]
-            if "task_id" in _c:
-                task_id = _c["task_id"]
-            else:
-                task_id = os.path.basename(config_file).split(".")[0].split("_")[-1]
-                _c["task_id"] = task_id
-                # map the start_url env variable to a valid url
-                _c["start_url"] = get_url(_c["start_url"])
-        render_helper = RenderHelper(_c, args.result_dir, args.action_set_tag)
-
-        # automatically login
-        if _c["storage_state"]:
-            cookie_file_name = os.path.basename(_c["storage_state"])
-            comb = get_site_comb_from_filepath(cookie_file_name)
-            temp_dir = tempfile.mkdtemp()
-            # subprocess to renew the cookie
-            subprocess.run(
-                [
-                    "python",
-                    "src/browser_env/auto_login.py",
-                    "--auth_folder",
-                    temp_dir,
-                    "--site_list",
-                    *comb,
-                ]
-            )
-            _c["storage_state"] = f"{temp_dir}/{cookie_file_name}"
-            assert os.path.exists(_c["storage_state"])
-            # update the config file
-            config_file = f"{temp_dir}/{os.path.basename(config_file)}"
-            with open(config_file, "w") as f:
-                json.dump(_c, f)
-
-        logger.info(f"[Config file]: {config_file}")
-        logger.info(f"[Intent]: {intent}")
-
-        agent.reset(config_file)
-        trajectory: Trajectory = []
-        obs, info = env.reset(options={"config_file": config_file})
-        state_info: StateInfo = {"observation": obs, "info": info}
-        if state_changelogger is not None:
-            state_info["history"] = "None"
-        trajectory.append(state_info)
-        history_accum = []
-        meta_data = {"action_history": ["None"], "env_type": "webarena"}
-        while True:
-            early_stop_flag, stop_info = early_stop(
-                trajectory, max_steps, early_stop_thresholds
-            )
-            init_observation = state_info["observation"]["text"]
-            if early_stop_flag:
-                action = create_stop_action(f"Early stop: {stop_info}")
-            else:
-                try:
-                    action = agent.next_action(trajectory, intent, meta_data=meta_data)
-                except ValueError as e:
-                    # get the error message
-                    action = create_stop_action(f"ERROR: {str(e)}")
-            trajectory.append(action)
-            action_str = get_action_description(
-                action,
-                state_info["info"]["observation_metadata"],
-                action_set_tag=args.action_set_tag,
-                prompt_constructor=(
-                    agent.prompt_constructor if isinstance(agent, PromptAgent) else None
-                ),
-            )
-            render_helper.render(action, state_info, meta_data, args.render_screenshot)
-            meta_data["action_history"].append(action_str)
-
-            if action["action_type"] == ActionTypes.STOP:
-                break
-
-            obs, _, terminated, _, info = env.step(action)
-            state_info = {"observation": obs, "info": info}
-            final_observation = state_info["observation"]["text"]
-            trajectory.append(state_info)
-            if terminated:
-                # add a action place holder
-                trajectory.append(create_stop_action(""))
-                break
-
-        if "eval" in _c:
-            evaluator = evaluator_router(config_file)
-            score = evaluator(
-                trajectory=trajectory,
-                config_file=config_file,
-                page=env.page,
-                client=env.get_page_client(env.page),
-            )
-        else:
-            score = 1.0
-
-        scores.append(score)
-
-        if score == 1:
-            logger.info(f"[Result] (PASS) {config_file}")
-        else:
-            logger.info(f"[Result] (FAIL) {config_file}")
-
-        if args.save_trace_enabled:
-            env.save_trace(Path(args.result_dir) / "traces" / f"{task_id}.zip")
-
-    except openai.OpenAIError as e:
-        logger.info(f"[OpenAI Error] {repr(e)}")
-    except Exception as e:
-        logger.info(f"[Unhandled Error] {repr(e)}]")
-        import traceback
-
-        # write to error file
-        with open(Path(args.result_dir) / "error.txt", "a") as f:
-            f.write(f"[Config file]: {config_file}\n")
-            f.write(f"[Unhandled Error] {repr(e)}\n")
-            f.write(traceback.format_exc())  # write stack trace to file
-
-    render_helper.close()
-    env.close()
-
-
-def prepare(args: argparse.Namespace) -> None:
-
-    # prepare result dir
-    result_dir = args.result_dir
-    if not result_dir:
-        result_dir = f"cache/results_{time.strftime('%Y%m%d%H%M%S', time.localtime())}"
-    if not Path(result_dir).exists():
-        Path(result_dir).mkdir(parents=True, exist_ok=True)
-        args.result_dir = result_dir
-        logger.info(f"Create result dir: {result_dir}")
-
-    if not (Path(result_dir) / "traces").exists():
-        (Path(result_dir) / "traces").mkdir(parents=True)
-
-    # log the log file
-    with open(os.path.join(result_dir, "log_files.txt"), "a+") as f:
-        f.write(f"{LOG_FILE_NAME}\n")
-
-
-def get_unfinished(config_files: list[str], result_dir: str) -> list[str]:
-    result_files = glob.glob(f"{result_dir}/*.html")
-    task_ids = [os.path.basename(f).split(".")[0].split("_")[1] for f in result_files]
-    unfinished_configs = []
-    for config_file in config_files:
-        task_id = os.path.basename(config_file).split(".")[0]
-        if task_id not in task_ids:
-            unfinished_configs.append(config_file)
-    return unfinished_configs
-
-
-def dump_config(args: argparse.Namespace) -> None:
-    config_file = Path(args.result_dir) / "config.json"
-    if not config_file.exists():
-        with open(config_file, "w") as f:
-            json.dump(vars(args), f, indent=4)
-            logger.info(f"Dump config to {config_file}")
-
-
 if __name__ == "__main__":
     args = config()
     args.sleep_after_execution = 2.0
-    # prepare(args)
+
+    if args.url != "":
+        # set WA_SHOPPING, WA_SHOPPING_ADMIN, WA_REDDIT, WA_GITLAB, WA_WIKIPEDIA, WA_MAP, WA_HOMEPAGE using base_url
+        base_url = args.url
+        os.environ["WA_SHOPPING"] = f"{base_url}:7770/"
+        os.environ["WA_SHOPPING_ADMIN"] = f"{base_url}:7780/admin"
+        os.environ["WA_REDDIT"] = f"{base_url}:9999"
+        os.environ["WA_GITLAB"] = f"{base_url}:8023"
+        os.environ["WA_WIKIPEDIA"] = (
+            f"{base_url}:8888/wikipedia_en_all_maxi_2022-05/A/User:The_other_Kiwix_guy/Landing"
+        )
+        os.environ["WA_MAP"] = f"{base_url}:3000"
+        os.environ["WA_HOMEPAGE"] = f"{base_url}:4399"
 
     test_file_list = []
     changelog_model = None
@@ -485,6 +267,16 @@ if __name__ == "__main__":
             max_new_tokens=512,
             temperature=args.temperature,
         )
+    elif args.use_together_ai:
+        # use a reasonably high temperature to get multiple trajectories
+        # TogetherAI uses Turbo postfix for quantized models
+        chat_model_args = TogetherAIModelArgs(
+            model_name=f"{args.model}-Turbo",
+            max_total_tokens=16_384,
+            max_input_tokens=16_384 - 512,
+            max_new_tokens=512,
+            temperature=args.temperature,
+        )
     else:
         chat_model_args = SelfHostedModelArgs(
             model_name=args.model,
@@ -492,7 +284,8 @@ if __name__ == "__main__":
             max_input_tokens=16_384 - 512,
             max_new_tokens=512,
             backend="vllm",
-            **default_oss_llms_args,
+            n_retry_server=4,
+            temperature=args.temperature,
         )
 
     if args.data == "nnetnav6k":
@@ -515,11 +308,42 @@ if __name__ == "__main__":
             )
             for task in ALL_OPENENDED_WEBARENA_TASK_IDS[:1000]
         ]
+    elif args.data == "webarena_subsampled":
+        # subsampled evaluation
+        env_args_list = [
+            EnvArgs(
+                task_name=task,
+                task_seed=0,
+                max_steps=20,
+            )
+            for idx, task in enumerate(ALL_WEBARENA_TASK_IDS)
+            if idx % 8 == 0
+        ]
+    elif args.data == "webarena":
+        env_args_list = [
+            EnvArgs(
+                task_name=task,
+                task_seed=0,
+                max_steps=20,
+            )
+            for task in ALL_WEBARENA_TASK_IDS
+        ]
+    elif args.data == "webvoyager":
+        env_args_list = [
+            EnvArgs(
+                task_name=task,
+                task_seed=0,
+                max_steps=20,
+            )
+            for task in ALL_WEBVOYAGER_TASK_IDS
+        ]
     else:
         raise ValueError("Unknown data config")
 
     if os.path.exists(args.result_dir):
         exp_args_list = find_incomplete(args.result_dir, include_errors=True)
+        exp_args_current = Counter([o.status for o in exp_args_list])
+        logger.info(f"Current status: {exp_args_current}")
     else:
         agent = AgentFactory(
             flags=FLAGS_GPT_4o,
@@ -535,6 +359,7 @@ if __name__ == "__main__":
                 logging_level=logging.INFO,
             )
             exp_args_list.append(exp_args)
+    logger.info(f"Total {len(exp_args_list)} tasks to run")
     run_experiments(args.n_jobs, exp_args_list, args.result_dir, "joblib", 1)
 
     # if "debug" not in args.result_dir:

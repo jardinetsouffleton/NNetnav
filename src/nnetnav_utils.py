@@ -84,10 +84,10 @@ def get_trajectory_relabeler(args, only_path=False):
         return relabeling_model
 
 
-def get_reward_model(args, only_path=False):
+def get_reward_model_full(args, only_path=False):
     llm_config = lm_config.construct_llm_config(args)
     if args.environment_type in ["webarena", "openweb"]:
-        reward_prompt = "src/agent/prompts/jsons/p_reward_lenient.json"
+        reward_prompt = "src/agent/prompts/jsons/p_reward_detailed.json"
     elif args.environment_type == "miniwob":
         reward_prompt = "src/agent/prompts/jsons_miniwob/p_reward_lenient.json"
     else:
@@ -107,23 +107,61 @@ def get_reward_model(args, only_path=False):
     return reward_model
 
 
-def get_exploration_policy(args, only_path=False):
+def get_reward_model(args, only_path=False):
     llm_config = lm_config.construct_llm_config(args)
-    if args.environment_type in ["webarena", "openweb"]:
+    if args.environment_type == "webarena":
+        reward_prompt = "src/agent/prompts/jsons/p_reward_lenient.json"
+    elif args.environment_type == "openweb":
+        reward_prompt = "src/agent/prompts/jsons_openweb/p_reward_lenient.json"
+    elif args.environment_type == "miniwob":
+        reward_prompt = "src/agent/prompts/jsons_miniwob/p_reward_lenient.json"
+    else:
+        raise ValueError(f"Unknown environment type: {args.environment_type}")
+    if only_path:
+        return reward_prompt
+    with open(reward_prompt) as f:
+        constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
+    tokenizer = Tokenizer(args.provider, args.model)
+    prompt_constructor = eval(constructor_type)(
+        reward_prompt, lm_config=llm_config, tokenizer=tokenizer
+    )
+    reward_model = InstructionGenerator(
+        lm_config=llm_config,
+        prompt_constructor=prompt_constructor,
+    )
+    return reward_model
+
+
+def get_exploration_policy(args, only_path=False, use_llama=False):
+    llm_config = lm_config.construct_llm_config(args)
+    if args.environment_type == "webarena":
         json_dir = "src/agent/prompts/jsons_bgym"
+    elif args.environment_type == "openweb":
+        json_dir = "src/agent/prompts/jsons_openweb"
     elif args.environment_type == "miniwob":
         json_dir = "src/agent/prompts/jsons_miniwob"
     else:
         raise ValueError(f"Unknown environment type: {args.environment_type}")
 
-    if args.use_personas:
-        zero_shot_policy_prompt = (
-            "{}/p_cot_exploration_with_history_persona.json".format(json_dir)
-        )
+    if use_llama:
+        if args.use_personas:
+            zero_shot_policy_prompt = (
+                "{}/p_cot_exploration_llama_with_history_persona.json".format(json_dir)
+            )
+        else:
+            zero_shot_policy_prompt = (
+                "{}/p_cot_exploration_llama_with_history.json".format(json_dir)
+            )
+
     else:
-        zero_shot_policy_prompt = "{}/p_cot_exploration_with_history.json".format(
-            json_dir
-        )
+        if args.use_personas:
+            zero_shot_policy_prompt = (
+                "{}/p_cot_exploration_with_history_persona.json".format(json_dir)
+            )
+        else:
+            zero_shot_policy_prompt = "{}/p_cot_exploration_with_history.json".format(
+                json_dir
+            )
     with open(zero_shot_policy_prompt) as f:
         constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
     tokenizer = Tokenizer(args.provider, args.model)

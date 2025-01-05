@@ -44,6 +44,11 @@ from agentlab.llm.llm_configs import CHAT_MODEL_ARGS_DICT
 from agentlab.experiments.launch_exp import run_experiments
 from webarena_openended import WebArenaOpenEnded, NNetNavOpenEndedTask
 from agentlab.experiments.launch_exp import find_incomplete, run_experiments
+from agentlab.llm.chat_api import (
+    SelfHostedModelArgs,
+    OpenRouterModelArgs,
+    TogetherAIModelArgs,
+)
 
 
 LOG_FOLDER = "log_files"
@@ -454,7 +459,9 @@ def run_nnetnav_exploration_bgym(args):
         all_exps = find_incomplete(args.result_dir, include_errors=True)
     else:
         # first get the prompts for the relabeling, reward and exploration policy
-        exploration_policy_prompt_path = get_exploration_policy(args, only_path=True)
+        exploration_policy_prompt_path = get_exploration_policy(
+            args, only_path=True, use_llama="llama" in args.model
+        )
         reward_model_prompt_path = get_reward_model(args, only_path=True)
         trajectory_labeler_prompt_path = get_trajectory_relabeler(args, only_path=True)
         state_changelog_model_prompt_path = get_changelog_model(args, only_path=True)
@@ -466,7 +473,14 @@ def run_nnetnav_exploration_bgym(args):
         for _ in range(args.exploration_size_per_seed):
             for config_file in config_list:
                 all_instructions.append(("n/a", config_file))
-        chat_model_args = CHAT_MODEL_ARGS_DICT["openai/gpt-4o-mini-2024-07-18"]
+        chat_model_args = TogetherAIModelArgs(
+            model_name=f"{args.model}-Turbo",
+            max_total_tokens=16_384,
+            max_input_tokens=16_384 - 512,
+            max_new_tokens=512,
+            temperature=args.temperature,
+        )
+        # chat_model_args = CHAT_MODEL_ARGS_DICT["openai/gpt-4o-mini-2024-07-18"]
         all_configs = _get_all_data(all_instructions)
         if args.use_personas:
             if args.environment_type == "webarena":
