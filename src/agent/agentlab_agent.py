@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 from browsergym.experiments.agent import Agent as BrowserGymAgent
 from browsergym.experiments.agent import AgentInfo
 import re
+import os
 from agentlab.agents.generic_agent.generic_agent import GenericAgentArgs
 from agentlab.agents.generic_agent.agent_configs import (
     CHAT_MODEL_ARGS_DICT,
@@ -40,6 +41,8 @@ from browser_env.actions import (
 
 from browsergym.core.registration import register_task
 from webarena_openended import WebArenaOpenEnded, NNetNavOpenEndedTask
+import webarena_openended
+import webvoyager
 
 logger = logging.getLogger(__name__)
 
@@ -296,11 +299,14 @@ class NNetNavExplorerAgent(BrowserGymAgent):
                 bid_dict[o["browsergym_id"]] = o["name"]["value"]
             else:
                 bid_dict[o["browsergym_id"]] = ""
+        action_splitter = self.prompt_constructor["exploration"].instruction[
+            "meta_data"
+        ]["action_splitter"]
         action_str = get_action_description_bgym(
             action,
             bid_dict,
             action_set_tag=self.action_set_tag,
-            prompt_constructor=self.prompts["exploration"],
+            action_splitter=action_splitter,
         )
 
         return action_str
@@ -314,6 +320,7 @@ class NNetNavExplorerAgent(BrowserGymAgent):
         self.actions = ["None"]
         self.obs_history = []
         self.past_transitions = []
+        self.past_subtasks = ["None"]
 
     def early_stop(self):
         """
@@ -355,11 +362,13 @@ class NNetNavExplorerAgent(BrowserGymAgent):
                 {
                     "trajectory": trajectory_description,
                     "instruction": trajectory_label["answer"],
+                    "previous_subtask": self.past_subtasks[-1],
                 },
             )
             # add logging
             logger.info(f"[Reward]: {reward['answer']}")
-
+            logger.info(f"[Reward Reasoning]: {reward['output']}")
+            self.past_subtasks.append(trajectory_label["answer"])
             if int(reward["answer"]) < 4:
                 # if the reward is zero, then we should not explore further
                 ans_dict = dict(
@@ -461,6 +470,8 @@ class NNetNavBrowserGymAgent(BrowserGymAgent):
         self.lm_config = lm_config
         self.prompt_constructor = prompt_constructor
         self.max_retry = lm_config.gen_config["max_retry"]
+        homepage = os.getenv("WA_HOMEPAGE", "https://www.google.com")
+        logger.info(f"Homepage: {homepage}")
         self.reset(seed=None)
 
     def obs_preprocessor(self, obs: dict) -> dict:
@@ -496,6 +507,8 @@ class NNetNavBrowserGymAgent(BrowserGymAgent):
         except ParseError as e:
             ans_dict = dict(
                 action="stop[parsing error]",
+                bgym_action="send_msg_to_user('parsing error')",
+                raw_prediction="Cannot correctly parse the action",
                 n_retry=self.max_retry + 1,
                 busted_retry=1,
             )
@@ -526,11 +539,14 @@ class NNetNavBrowserGymAgent(BrowserGymAgent):
                 bid_dict[o["browsergym_id"]] = o["name"]["value"]
             else:
                 bid_dict[o["browsergym_id"]] = ""
+        action_splitter = self.prompt_constructor.instruction["meta_data"][
+            "action_splitter"
+        ]
         action_str = get_action_description_bgym(
             action,
             bid_dict,
             action_set_tag=self.action_set_tag,
-            prompt_constructor=self.prompt_constructor,
+            action_splitter=action_splitter,
         )
 
         return action_str
