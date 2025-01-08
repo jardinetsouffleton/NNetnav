@@ -248,14 +248,12 @@ def run_orm(exp_dir, is_nnetnav=False):
             temperature=0.01,
         ).make_model()
     elif args.use_together_ai:
-        # use a reasonably high temperature to get multiple trajectories
-        # TogetherAI uses Turbo postfix for quantized models
         chat_model_args = TogetherAIModelArgs(
             model_name=f"{args.model}-Turbo",
             max_total_tokens=16_384,
             max_input_tokens=16_384 - 512,
             max_new_tokens=512,
-            temperature=args.temperature,
+            temperature=0.01,
         ).make_model()
     else:
         chat_model_args = SelfHostedModelArgs(

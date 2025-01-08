@@ -158,7 +158,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--process_dir", type=str, default="results")
     parser.add_argument(
-        "--api_model", default="gpt-4-vision-preview", type=str, help="api model name"
+        "--api_model", default="gpt-4o", type=str, help="api model name"
     )
     parser.add_argument("--max_attached_imgs", type=int, default=15)
     args = parser.parse_args()
@@ -169,12 +169,12 @@ def main():
     web_task_res = {}
     for file_dir in glob.glob(os.path.join(args.process_dir, "*")):
         if os.path.isdir(file_dir):
-            print(file_dir)
             response = auto_eval_by_gpt4v(
                 file_dir, client, args.api_model, args.max_attached_imgs
             )
             web_task_res[file_dir] = response
-
+    with open(f"{args.process_dir}/result.pickle", "wb") as writer:
+        pickle.dump(web_task_res, writer)
 
 if __name__ == "__main__":
     main()

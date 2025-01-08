@@ -338,7 +338,7 @@ if __name__ == "__main__":
             max_total_tokens=16_384,
             max_input_tokens=16_384 - 512,
             max_new_tokens=512,
-            temperature=args.temperature,
+            temperature=0.01,
         ).make_model()
     else:
         chat_model = SelfHostedModelArgs(

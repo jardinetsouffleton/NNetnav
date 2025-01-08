@@ -46,11 +46,11 @@ import browsergym.webarena
 from browsergym.webarena import ALL_WEBARENA_TASK_IDS
 
 from nnetnav_utils import get_url
-import webarena_openended
-import webvoyager
+import nnetnav_registry
+import webvoyager_registry
 from bgym import ExpArgs, EnvArgs
-from webarena_openended import ALL_OPENENDED_WEBARENA_TASK_IDS
-from webvoyager import ALL_WEBVOYAGER_TASK_IDS
+from nnetnav_registry import ALL_OPENENDED_WEBARENA_TASK_IDS, ALL_OPENWEB_TASK_IDS
+from webvoyager_registry import ALL_WEBVOYAGER_TASK_IDS
 
 from evaluation_harness import evaluator_router
 from agent import InstructionGenerator
@@ -203,6 +203,7 @@ def config() -> argparse.Namespace:
         choices=[
             "nnetnav6k",
             "nnetnav1k",
+            "nnetnav_ow",
             "webarena_subsampled",
             "webarena",
             "webvoyager",
@@ -307,6 +308,16 @@ if __name__ == "__main__":
                 # task_kwargs={"config_str": json.dumps(conf), "task_id": idx},
             )
             for task in ALL_OPENENDED_WEBARENA_TASK_IDS[:1000]
+        ]
+    elif args.data == "nnetnav_ow":
+        ### data from nnetnav_openworld
+        env_args_list = [
+            EnvArgs(
+                task_name=task,
+                task_seed=0,
+                max_steps=20,
+            )
+            for task in ALL_OPENWEB_TASK_IDS
         ]
     elif args.data == "webarena_subsampled":
         # subsampled evaluation
