@@ -32,7 +32,7 @@ from pydantic import BaseModel, create_model
 class Topics(BaseModel):
     topics: list[str]
 
-def create_literal_type(values):
+def create_literal_type(values) -> type[Literal]: # type: ignore
     return Literal[tuple(values)]  # type: ignore
 
 def create_dynamic_model(field_name: str, allowed_values: list[str]) -> type[BaseModel]:
