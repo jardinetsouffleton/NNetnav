@@ -1,10 +1,14 @@
 # This scripts implement an LLM-based semantic clustering method for intent topic clustering.
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import math
+from pathlib import Path
+import threading
 from typing import Literal
 from openai import OpenAI
 import json
 
 from pydantic import BaseModel, create_model
+from tqdm import tqdm
 
 # Algorithm:
 #     Input:
@@ -121,25 +125,110 @@ Return the chosen topic string."""
     clusters = {topic: [] for topic in topic_list}
     
     # Assign intents to topics
-    for intent in intents:
+    for intent in tqdm(intents):
         topic = call_llm_assign_topic(intent, topic_list)
         clusters[topic].append(intent)
     
     return clusters
 
-# Example usage:
-if __name__ == "__main__":
-    example_intents = [
-        "book a flight",
-        "check flight status",
-        "cancel reservation",
-        "find restaurants",
-        "make dinner reservation",
-        "view menu",
-        "check weather",
-        "get forecast"
-    ]
+def parallel_cluster_intents(sites2intents: dict[str, list[str]], 
+                           max_workers: int = 3,
+                           chunk_size: int = 100) -> dict[str, dict[str, list[str]]]:
+    """
+    Runs clustering in parallel for multiple websites using ThreadPoolExecutor.
     
-    result = cluster_intents(example_intents, chunk_size=4)
-    print(json.dumps(result, indent=2))
+    Args:
+        sites2intents: dictionary mapping website strings to lists of intents
+        max_workers: Maximum number of parallel threads to use
+        chunk_size: Size of chunks for clustering
+    
+    Returns:
+        dictionary mapping websites to their clustering results
+    """
+    # Create a thread-safe progress bar
+    pbar_lock = threading.Lock()
+    pbar = tqdm(total=len(sites2intents), desc="Processing websites")
+    
+    def cluster_website(website: str, intents: list[str]) -> tuple[str, dict]:
+        """
+        Clusters intents for a single website and updates progress bar.
+        Returns tuple of (website, clustering_result).
+        """
+        try:
+            # Extract website name and format it
+            website_name = eval(website)[0]
+            formatted_name = website_name.replace("//", "_").replace("/", "_")
+            
+            # Perform clustering
+            result = cluster_intents(intents, chunk_size=chunk_size)
+            
+            # Update progress bar thread-safely
+            with pbar_lock:
+                pbar.update(1)
+                pbar.set_description(f"Completed {website_name}")
+            
+            return formatted_name, result
+            
+        except Exception as e:
+            print(f"Error processing {website}: {str(e)}")
+            return website, {}
+
+    # Store all results
+    all_results = {}
+    
+    # Create thread pool and submit jobs
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all clustering jobs
+        future_to_website = {
+            executor.submit(cluster_website, website, intents): website
+            for website, intents in sites2intents.items()
+        }
+        
+        # Process completed jobs
+        for future in as_completed(future_to_website):
+            website = future_to_website[future]
+            try:
+                website_name, result = future.result()
+                if result:  # Only store if we got valid results
+                    all_results[website_name] = result
+            except Exception as e:
+                print(f"Failed to process {website}: {str(e)}")
+    
+    pbar.close()
+    return all_results
+
+def save_results(results: dict[str, dict[str, list[str]]], output_dir: str = "./"):
+    """
+    Saves clustering results to individual JSON files.
+    
+    Args:
+        results: dictionary mapping websites to their clustering results
+        output_dir: Directory to save the JSON files
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True)
+    
+    for website, clusters in results.items():
+        output_file = output_path / f"clusters_{website}.json"
+        with open(output_file, 'w') as f:
+            json.dump(clusters, f, indent=2)
+        print(f"Saved clustering results for {website} to {output_file}")
+
+if __name__ == "__main__":
+    # Load input data
+    if Path("sites2intents.json").exists():
+        with open("sites2intents.json") as f:
+            sites2intents = json.load(f)
+        
+        # Run parallel clustering
+        results = parallel_cluster_intents(
+            sites2intents,
+            max_workers=20,  # Adjust based on your API rate limits and needs
+            chunk_size=100
+        )
+        
+        # Save results
+        save_results(results)
+    else:
+        print("sites2intents.json not found! The sites2intents.json file should contain a dictionary mapping websites to lists of intents.")
     
