@@ -212,6 +212,9 @@ def config() -> argparse.Namespace:
     parser.add_argument(
         "--url", type=str, default="", help="If not none, set URLs for webarena"
     )
+    parser.add_argument(
+        "--port_num", type=int, default=8000, help="Port number for self-hosted model"
+    )
     args = parser.parse_args()
 
     # check the whether the action space is compatible with the observation space
@@ -243,7 +246,6 @@ def convert_to_description(changelogs):
 if __name__ == "__main__":
     args = config()
     args.sleep_after_execution = 2.0
-
     if args.url != "":
         # set WA_SHOPPING, WA_SHOPPING_ADMIN, WA_REDDIT, WA_GITLAB, WA_WIKIPEDIA, WA_MAP, WA_HOMEPAGE using base_url
         base_url = args.url
@@ -287,6 +289,9 @@ if __name__ == "__main__":
             backend="vllm",
             n_retry_server=4,
             temperature=args.temperature,
+            stop_token=args.stop_token,
+            top_p=args.top_p,
+            port_num=args.port_num,
         )
 
     if args.data == "nnetnav6k":
@@ -337,7 +342,7 @@ if __name__ == "__main__":
                 task_seed=0,
                 max_steps=20,
             )
-            for task in ALL_WEBARENA_TASK_IDS
+            for idx, task in enumerate(ALL_WEBARENA_TASK_IDS)
         ]
     elif args.data == "webvoyager":
         env_args_list = [

@@ -145,7 +145,7 @@ def get_retroactive_reasoner(args, chat_model, obs_flags):
     else:
         raise ValueError(f"Unknown environment type: {args.environment_type}")
 
-    prompt = f"{prompt_folder}/p_retroactive_reasoning.json"
+    prompt = f"{prompt_folder}/p_forward_reasoning.json"
 
     llm_config = lm_config.construct_llm_config(args)
     with open(prompt, "r") as f:
@@ -200,14 +200,16 @@ class ReasoningFunc:
             action = orig_action
             output = reasoner_agent(
                 {
-                    "action": action,
+                    # "action": action,
                     "previous_actions": previous_actions,
                     "state": state,
                     "instruction": instruction,
                 }
             )
-
-            retroactive_reasoning.append(output["answer"])
+            if "raw_prediction" in output:
+                retroactive_reasoning.append(output["raw_prediction"])
+            else:
+                retroactive_reasoning.append("")
         return {"data_idx": self.data_idx, "reasoning": retroactive_reasoning}
 
 

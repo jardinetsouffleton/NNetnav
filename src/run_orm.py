@@ -317,6 +317,9 @@ if __name__ == "__main__":
                 continue
             print(task_id)
             if os.path.isdir(fname):
+                if os.path.exists("{}/reward_llama.pkl".format(fname)):
+                    # already computed reward
+                    continue
                 exp_dirs.append(fname)
     else:
         trace2dir_orig = {}
@@ -332,6 +335,12 @@ if __name__ == "__main__":
 
         exp_set = []
         for task_id in tqdm(trace2dir_orig):
+            if os.path.exists("{}/reward_llama.pkl".format(trace2dir_orig[task_id])):
+                # already computed reward
+                continue
+            if not os.path.exists("{}/summary_info.json".format(trace2dir_orig[task_id])):
+                # not finished successfully
+                continue
             try:
                 exp_arg = pickle.load(
                     open("{}/exp_args.pkl".format(trace2dir_orig[task_id]), "rb")

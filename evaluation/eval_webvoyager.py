@@ -19,13 +19,14 @@ SYSTEM_PROMPT = """As an evaluator, you will be presented with three primary com
 3. Result Response: This is a textual response obtained after the execution of the web task. It serves as textual result in response to the instruction.
 
 -- You DO NOT NEED to interact with web pages or perform actions such as booking flights or conducting searches on websites.
+-- If the model gets blocked at any point by a CAPTCHA or multiple login pop-ups, return 'NOT APPLICABLE' 
 -- You SHOULD NOT make assumptions based on information not presented in the screenshot when comparing it to the instructions.
 -- Your primary responsibility is to conduct a thorough assessment of the web task instruction against the outcome depicted in the screenshot and in the response, evaluating whether the actions taken align with the given instructions.
 -- NOTE that the instruction may involve more than one task, for example, locating the garage and summarizing the review. Failing to complete either task, such as not providing a summary, should be considered unsuccessful.
 -- NOTE that the screenshot is authentic, but the response provided by LLM is generated at the end of web browsing, and there may be discrepancies between the text and the screenshots.
 -- Note the difference: 1) Result response may contradict the screenshot, then the content of the screenshot prevails, 2) The content in the Result response is not mentioned on the screenshot, choose to believe the content.
 
-You should elaborate on how you arrived at your final evaluation and then provide a definitive verdict on whether the task has been successfully accomplished, either as 'SUCCESS' or 'NOT SUCCESS'."""
+You should elaborate on how you arrived at your final evaluation and then provide a definitive verdict on whether the task has been successfully accomplished, either as 'SUCCESS', 'NOT SUCCESS' or 'NOT_APPLICABLE' (for cases blocked by CAPTCHA or login pop-ups)"""
 USER_PROMPT = """TASK: <task>
 Result Response: <answer>
 <num> screenshots at the end: """

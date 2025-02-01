@@ -132,14 +132,15 @@ def config():
 
 def get_retroactive_reasoner(args, chat_model, obs_flags):
     if args.environment_type == "webarena":
-        # use the openweb prompt for webarena
+        prompt_folder = "src/agent/prompts/jsons"
+    elif args.environment_type == "openweb":
         prompt_folder = "src/agent/prompts/jsons_openweb"
     elif args.environment_type == "miniwob":
         prompt_folder = "src/agent/prompts/jsons_miniwob"
     else:
         raise ValueError(f"Unknown environment type: {args.environment_type}")
 
-    prompt = f"{prompt_folder}/p_retroactive_reasoning.json"
+    prompt = f"{prompt_folder}/p_forward_reasoning.json"
 
     llm_config = lm_config.construct_llm_config(args)
     with open(prompt, "r") as f:
@@ -149,6 +150,27 @@ def get_retroactive_reasoner(args, chat_model, obs_flags):
         prompt, lm_config=llm_config, tokenizer=tokenizer
     )
     return LMModule(chat_model, obs_flags, prompt_constructor)
+
+
+# def get_retroactive_reasoner(args, chat_model, obs_flags):
+#     if args.environment_type == "webarena":
+#         # use the openweb prompt for webarena
+#         prompt_folder = "src/agent/prompts/jsons_openweb"
+#     elif args.environment_type == "miniwob":
+#         prompt_folder = "src/agent/prompts/jsons_miniwob"
+#     else:
+#         raise ValueError(f"Unknown environment type: {args.environment_type}")
+
+#     prompt = f"{prompt_folder}/p_retroactive_reasoning.json"
+
+#     llm_config = lm_config.construct_llm_config(args)
+#     with open(prompt, "r") as f:
+#         constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
+#     tokenizer = Tokenizer(args.provider, args.model)
+#     prompt_constructor = eval(constructor_type)(
+#         prompt, lm_config=llm_config, tokenizer=tokenizer
+#     )
+#     return LMModule(chat_model, obs_flags, prompt_constructor)
 
 
 def get_add_stop_action(args, chat_model, obs_flags):
@@ -192,14 +214,16 @@ class ReasoningFunc:
             action = orig_action
             output = reasoner_agent(
                 {
-                    "action": action,
+                    # "action": action,
                     "previous_actions": previous_actions,
                     "state": state,
                     "instruction": instruction,
                 }
             )
-
-            retroactive_reasoning.append(output["answer"])
+            if "raw_prediction" in output:
+                retroactive_reasoning.append(output["raw_prediction"])
+            else:
+                retroactive_reasoning.append("")
         return {"data_idx": self.data_idx, "reasoning": retroactive_reasoning}
 
 

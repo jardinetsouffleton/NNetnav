@@ -40,9 +40,9 @@ from browser_env.actions import (
 )
 
 from browsergym.core.registration import register_task
-from webarena_openended import WebArenaOpenEnded, NNetNavOpenEndedTask
-import webarena_openended
-import webvoyager
+from nnetnav_registry import WebArenaOpenEnded, NNetNavOpenEndedTask
+import nnetnav_registry
+import webvoyager_registry
 
 logger = logging.getLogger(__name__)
 

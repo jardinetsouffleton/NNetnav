@@ -60,10 +60,10 @@ def main(
 ):
     instruction_template = json.load(open(prompt_path, "r"))["template"]
     if os.path.exists(
-        "{}/filtered_parsed_with_retroactive_stop_action.json".format(nnetnav_dem_dir)
+        "{}/iltered_parsed_with_retroactive_stop_action.json".format(nnetnav_dem_dir)
     ):
         with open(
-            "{}/filtered_parsed_with_retroactive_stop_action.json".format(
+            "{}/iltered_parsed_with_retroactive_stop_action.json".format(
                 nnetnav_dem_dir
             ),
             "r",
@@ -133,9 +133,18 @@ def main(
             )
             chat_message = [system_chat_message] + instruction_tune_example
 
-            full_prompt = "{}\n{}".format(
-                chat_message[0]["content"], chat_message[1]["content"]
+            # need to follow the following format for instruction tuning of llama
+            full_prompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n{}\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n{}\n<|eot_id|>".format(
+                chat_message[0]["content"],
+                chat_message[1]["content"],
             )
+
+            output = (
+                "<|start_header_id|>assistant<|end_header_id|>\n{}\n<|eot_id|>".format(
+                    chat_message[-1]["content"]
+                )
+            )
+
             task_name = demonstration["task_id"]
             n_tokens = count_tokens(full_prompt, model_name)
             if n_tokens > 100000:
@@ -144,9 +153,10 @@ def main(
             output_curr = {
                 "dataset": f"webarena_{exp_name}",
                 "id": task_name,
-                "output": chat_message[-1]["content"],
+                "output": output,
                 "task_name": task_name,
                 "prompt": full_prompt,
+                "messages": chat_message,
                 "n_tokens": n_tokens,
             }
 
