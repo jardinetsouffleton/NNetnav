@@ -182,7 +182,15 @@ python src/run_nnetnav.py \
 **Important note about seed_dirs**: seed_states specify some metadata about websites that we will be running exploration on. WebArena has 5 websites, and so there are 5 seed states. Make sure to correctly configure the `start_url` based on your webarena setup! For Live-websites (WebVoyager subset), these seed_states look something like this:
 
 ```json
-{'sites': ['google_flights'], 'start_url': "https://www.google.com/flights", "geolocation": None, "require_reset": False, "storage_state": None, "intent": 'n/a', "env_type": "open_ended"}
+{
+  "sites": ["google_flights"],
+  "start_url": "https://www.google.com/flights",
+  "geolocation": null,
+  "require_reset": false,
+  "storage_state": null,
+  "intent": "n/a",
+  "env_type": "open_ended"
+}
 ```
 
 If you want to run NNetNav on a custom website, you can create your own seed_states!
