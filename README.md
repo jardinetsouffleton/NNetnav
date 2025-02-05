@@ -1,10 +1,6 @@
 # NNetNav: Unsupervised Learning of Browser Agents Through Environment Interaction in the Wild
-[<a href="https://arxiv.org/abs/2410.02907">Paper</a>] 
+[<a href="https://nnetnav.dev">Project Website</a>] 
 
-
-<div align="center">
-<img src="assets/nnetnav_fig.png" alt="NNetNav overview" title="Overview of NNetNav" width="600">
-</div>
 
 If you just want the NNetNav datasets, you can download it via huggingface:
 
@@ -50,21 +46,25 @@ python src/run_agent.py \
     --n_jobs 1 --data openended
 ```
 
-The script will prompt you to enter a URL and an instruction. After that, it will run the agent on the website and save the results in the specified directory.
+The script will prompt you to enter a URL and an instruction. After that, it will run the agent on the website and save the results in the specified directory. Below are some examples:
+
 
 <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-    <img src="assets/output_0.gif" style="width: 400px; max-width: 100%; border-radius: 10px;">
-    <img src="assets/output_1.gif" style="width: 400px; max-width: 100%; border-radius: 10px;">
-    <img src="assets/output_2.gif" style="width: 400px; max-width: 100%; border-radius: 10px;">
+    <figure>
+        <img src="assets/output_0.gif" style="width: 250px; max-width: 100%; border-radius: 10px;">
+        <figcaption style="text-align: center; font-size: 16px; font-weight: bold;">Find the list of current faculty in the NLP group</figcaption>
+    </figure>
+    <figure>
+        <img src="assets/output_1.gif" style="width: 250px; max-width: 100%; border-radius: 10px;">
+        <figcaption style="text-align: center; font-size: 16px; font-weight: bold;">Tell me the population of California</figcaption>
+    </figure>
+    <figure>
+        <img src="assets/output_2.gif" style="width: 250px; max-width: 100%; border-radius: 10px;">
+        <figcaption style="text-align: center; font-size: 16px; font-weight: bold;">What is the origin of Thieboudienne?</figcaption>
+    </figure>
 </div>
 
-
-
-
-If you want to generate your own synthetic demonstrations for websites, and train your own web agents, then read on!
-
-## TODOs
-- [ ] Walkthrough for creating NNetNavs for custom domains like banking, healthcare, education, etc.
+Note that nlp.stanford.edu and wikipedia.org are completely out-of-domain for LLama8b-NNetNav-Live (full list of websites used for training can be found in the paper). As with any ML model, LLama8b-NNetNav-Live works better on in-domain websites. If you want to create a NNetNav-ed model for your own websites, and train your own web agents, then read on!
 
 
 ## News
