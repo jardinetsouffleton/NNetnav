@@ -207,6 +207,7 @@ def run_nnetnav_exploration_bgym(args):
         for _ in range(args.exploration_size_per_seed):
             for config_file in config_list:
                 all_instructions.append(("n/a", config_file))
+
         chat_model_args = TogetherAIModelArgs(
             model_name=f"{args.model}-Turbo",
             max_total_tokens=16_384,

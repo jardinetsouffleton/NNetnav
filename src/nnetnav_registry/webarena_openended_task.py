@@ -28,6 +28,8 @@ class NNetNavOpenEndedTask(AbstractBrowserTask):
         """
         super().__init__(seed)
         self.start_url = start_url
+        # bigger viewport so screenshot has more stuff
+        self.viewport = {"width": 1280, "height": 1600}
         self.goal = goal
 
     def setup(self, page: playwright.sync_api.Page) -> tuple[str, dict]:

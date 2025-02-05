@@ -1,10 +1,9 @@
 """
     Script to run an agent end-to-end on a task.
-    It appears similar to evaluation/eval_webarena.py, but has a different purpose.
-    There is copied code, but the philosophy is to have separate recipes, instead of a giant script with many flags.
     We also use browsergym.
 """
 
+import datetime
 import argparse
 import glob
 import json
@@ -207,10 +206,15 @@ def config() -> argparse.Namespace:
             "webarena_subsampled",
             "webarena",
             "webvoyager",
+            "openended",
         ],
     )
+
     parser.add_argument(
-        "--url", type=str, default="", help="If not none, set URLs for webarena"
+        "--webarena_url",
+        type=str,
+        default="",
+        help="If not none, set URLs for webarena",
     )
     parser.add_argument(
         "--port_num", type=int, default=8000, help="Port number for self-hosted model"
@@ -246,9 +250,9 @@ def convert_to_description(changelogs):
 if __name__ == "__main__":
     args = config()
     args.sleep_after_execution = 2.0
-    if args.url != "":
+    if args.webarena_url != "":
         # set WA_SHOPPING, WA_SHOPPING_ADMIN, WA_REDDIT, WA_GITLAB, WA_WIKIPEDIA, WA_MAP, WA_HOMEPAGE using base_url
-        base_url = args.url
+        base_url = args.webarena_url
         os.environ["WA_SHOPPING"] = f"{base_url}:7770/"
         os.environ["WA_SHOPPING_ADMIN"] = f"{base_url}:7780/admin"
         os.environ["WA_REDDIT"] = f"{base_url}:9999"
@@ -353,10 +357,51 @@ if __name__ == "__main__":
             )
             for task in ALL_WEBVOYAGER_TASK_IDS
         ]
+
+    elif args.data == "openended":
+        # start by asking for a URL
+        from browsergym.core.registration import register_task
+        from nnetnav_registry import NNetNavOpenEndedTask
+
+        # TODO: assign a unique ID based on time
+        idx = int(datetime.datetime.now().timestamp())
+        # TODO: get user input for url
+
+        confirmed = False
+
+        while not confirmed:
+            url = input("Start URL: ").strip()
+            # TODO: get user input for intent
+            goal = input("Instruction: ").strip()
+
+            logger.info(f"Your URL: {url}")
+            logger.info(f"Your goal: {goal}")
+            # prompt user to confirm
+            # Prompt user to confirm
+            while True:
+                confirm_val = (
+                    input("Confirm inputs (y = yes, n = re-enter): ").strip().lower()
+                )
+                if confirm_val == "y":
+                    confirmed = True
+                    break
+                elif confirm_val == "n":
+                    confirmed = False
+                    break
+                else:
+                    logger.warning("Invalid input. Please enter 'y' or 'n'.")
+
+        curr_config = {
+            "start_url": url,
+            "goal": goal,
+        }
+        gym_id = f"openweb_nnetnav_openended_{idx}"
+        register_task(gym_id, NNetNavOpenEndedTask, task_kwargs=curr_config)
+        env_args_list = [EnvArgs(task_name=gym_id, task_seed=0, max_steps=40)]
     else:
         raise ValueError("Unknown data config")
 
-    if os.path.exists(args.result_dir):
+    if os.path.exists(args.result_dir) and not args.data == "openended":
         exp_args_list = find_incomplete(args.result_dir, include_errors=True)
         exp_args_current = Counter([o.status for o in exp_args_list])
         logger.info(f"Current status: {exp_args_current}")
@@ -377,31 +422,3 @@ if __name__ == "__main__":
             exp_args_list.append(exp_args)
     logger.info(f"Total {len(exp_args_list)} tasks to run")
     run_experiments(args.n_jobs, exp_args_list, args.result_dir, "joblib", 1)
-
-    # if "debug" not in args.result_dir:
-    #     test_file_list = get_unfinished(test_file_list, args.result_dir)
-    # if len(test_file_list) == 0:
-    #     logger.info("No task left to run")
-    # else:
-    #     print(f"Total {len(test_file_list)} tasks left")
-    #     args.render = False
-    #     args.render_screenshot = True
-    #     args.save_trace_enabled = True
-
-    #     args.current_viewport_only = True
-    #     dump_config(args)
-
-    #     if args.n_jobs == 1:
-    #         for config_file in test_file_list:
-    #             run(args, agent, config_file)
-
-    #     else:
-    #         exp_args = [(args, agent, config_file) for config_file in test_file_list]
-
-    #         def process_arg(exp_arg):
-    #             run(exp_arg[0], exp_arg[1], exp_arg[2])
-
-    #         # Parallelize the loop
-    #         Parallel(n_jobs=args.n_jobs)(
-    #             delayed(process_arg)(exp_arg) for exp_arg in exp_args
-    #         )
