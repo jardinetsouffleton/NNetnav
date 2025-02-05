@@ -49,20 +49,28 @@ python src/run_agent.py \
 The script will prompt you to enter a URL and an instruction. After that, it will run the agent on the website and save the results in the specified directory. Below are some examples:
 
 
-<div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-    <figure>
-        <img src="assets/output_0.gif" style="width: 250px; max-width: 100%; border-radius: 10px;">
-        <figcaption style="text-align: center; font-size: 16px; font-weight: bold;">Find the list of current faculty in the NLP group</figcaption>
-    </figure>
-    <figure>
-        <img src="assets/output_1.gif" style="width: 250px; max-width: 100%; border-radius: 10px;">
-        <figcaption style="text-align: center; font-size: 16px; font-weight: bold;">Tell me the population of California</figcaption>
-    </figure>
-    <figure>
-        <img src="assets/output_2.gif" style="width: 250px; max-width: 100%; border-radius: 10px;">
-        <figcaption style="text-align: center; font-size: 16px; font-weight: bold;">What is the origin of Thieboudienne?</figcaption>
-    </figure>
-</div>
+<table>
+  <tr>
+    <td style="text-align: center;">
+      <img src="assets/output_0.gif" width="200" style="border-radius: 10px;">
+      <br>
+      <strong>Find the list of current faculty in the NLP group</strong>
+    </td>
+    <td style="text-align: center;">
+      <img src="assets/output_1.gif" width="200" style="border-radius: 10px;">
+      <br>
+      <strong>Tell me the population of California</strong>
+    </td>
+    <td style="text-align: center;">
+      <img src="assets/output_2.gif" width="200" style="border-radius: 10px;">
+      <br>
+      <strong>What is the origin of Thieboudienne?</strong>
+    </td>
+  </tr>
+</table>
+
+
+
 
 Note that nlp.stanford.edu and wikipedia.org are completely out-of-domain for LLama8b-NNetNav-Live (full list of websites used for training can be found in the paper). As with any ML model, LLama8b-NNetNav-Live works better on in-domain websites. If you want to create a NNetNav-ed model for your own websites, and train your own web agents, then read on!
 
