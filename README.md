@@ -137,7 +137,7 @@ This codebase uses two environments, MiniWoB++ and WebArena. For setup instructi
 - [WebArena Setup](https://github.com/ServiceNow/BrowserGym/blob/main/browsergym/webarena/README.md)
 - [MiniWoB++ Setup](https://github.com/ServiceNow/BrowserGym/blob/main/browsergym/miniwob/README.md)
 
-If you run into issues with either setup, please open an issue on the respective repostories. Note that correctly setting up environments is a pre-requisite for the rest of the code
+If you run into issues with either setup, please open an issue on the respective repositories. Note that correctly setting up environments is a pre-requisite for the rest of the code
 
 ## Environment variables
 
@@ -198,8 +198,6 @@ If you want to run NNetNav on a custom website, you can create your own seed_sta
 After this, run:
 ```bash
 python postprocessing/postprocess_outputs_agentlab.py \
-  --orig_dir EXPLORATION_NNETNAV \
-  --filter_dir DATA_NNETNAV
 ```
 
 And then finally run:
