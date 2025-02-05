@@ -52,6 +52,12 @@ python src/run_agent.py \
 
 The script will prompt you to enter a URL and an instruction. After that, it will run the agent on the website and save the results in the specified directory.
 
+<video width="600" controls>
+  <source src="video.mp4" type="assets/output_teaser.mp4">
+  <source src="video.webm" type="assets/output_teaser.webm">
+  Your browser does not support the video tag.
+</video>
+
 
 If you want to generate your own synthetic demonstrations for websites, and train your own web agents, then read on!
 
@@ -245,7 +251,7 @@ If you use NNetNav in your work, please cite us using the following BibTeX entry
 ```bibtex
 @article{murty2024nnetscape,
   title={NNetNav: Unsupervised Learning of Browser Agents Through Environment Interaction in the Wild},
-  author={Murty, Shikhar and Bahdanau, Dzmitry and Manning, Christopher D},
+  author={Murty, Shikhar and and Zhu, Hao and Bahdanau, Dzmitry and Manning, Christopher D},
   journal={arXiv preprint arXiv:2410.02907},
   year={2024}
 }
