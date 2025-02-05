@@ -251,10 +251,7 @@ def generate_from_openai_chat_completion(
         )
     if "mistralai" in model or "llama" in model:
         # This is a local endpoint
-        if "mistralai" in model:
-            api_key = os.environ["MISTRAL_API_KEY"]
-        else:
-            api_key = os.environ["LLAMA_API_KEY"]
+        api_key = os.environ["VLLM_API_KEY"]
         client = openai.OpenAI(base_url="http://localhost:8000/v1", api_key=api_key)
         response = client.chat.completions.create(  # type: ignore
             model=model,

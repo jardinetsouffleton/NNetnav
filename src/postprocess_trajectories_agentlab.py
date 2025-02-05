@@ -1,4 +1,8 @@
 """
+add stop_action and retroactive reasoning but made compatible with agentlab
+"""
+
+"""
     postprocess trajectories to add retroactive reasoning and stop action
 """
 
@@ -14,6 +18,7 @@ from bs4 import BeautifulSoup
 
 from agent import InstructionGenerator
 from dataclasses import dataclass
+from tqdm import tqdm
 
 from agent.prompts import *
 import browsergym.miniwob  # register miniwob tasks as gym environments
@@ -27,8 +32,8 @@ from agentlab.llm.chat_api import (
 )
 from agentlab.agents import dynamic_prompting as dp
 from agentlab.agents.generic_agent.generic_agent_prompt import GenericPromptFlags
-
 from agent import LMModule
+
 
 LOG_FOLDER = "log_files"
 Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
@@ -115,7 +120,7 @@ def config():
         "--environment_type",
         type=str,
         default="webarena",
-        choices=["webarena", "miniwob"],
+        choices=["webarena", "miniwob", "openweb"],
     )
     parser.add_argument(
         "--script_mode",
@@ -152,33 +157,14 @@ def get_retroactive_reasoner(args, chat_model, obs_flags):
     return LMModule(chat_model, obs_flags, prompt_constructor)
 
 
-# def get_retroactive_reasoner(args, chat_model, obs_flags):
-#     if args.environment_type == "webarena":
-#         # use the openweb prompt for webarena
-#         prompt_folder = "src/agent/prompts/jsons_openweb"
-#     elif args.environment_type == "miniwob":
-#         prompt_folder = "src/agent/prompts/jsons_miniwob"
-#     else:
-#         raise ValueError(f"Unknown environment type: {args.environment_type}")
-
-#     prompt = f"{prompt_folder}/p_retroactive_reasoning.json"
-
-#     llm_config = lm_config.construct_llm_config(args)
-#     with open(prompt, "r") as f:
-#         constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
-#     tokenizer = Tokenizer(args.provider, args.model)
-#     prompt_constructor = eval(constructor_type)(
-#         prompt, lm_config=llm_config, tokenizer=tokenizer
-#     )
-#     return LMModule(chat_model, obs_flags, prompt_constructor)
-
-
 def get_add_stop_action(args, chat_model, obs_flags):
     if args.environment_type == "webarena":
-        # use the openweb prompt for webarena
+        prompt = "src/agent/prompts/jsons/p_add_stop_action.json"
+    elif args.environment_type == "openweb":
         prompt = "src/agent/prompts/jsons_openweb/p_add_stop_action.json"
     else:
         raise ValueError(f"Unknown environment type: {args.environment_type}")
+
     llm_config = lm_config.construct_llm_config(args)
     with open(prompt, "r") as f:
         constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
@@ -207,7 +193,7 @@ class ReasoningFunc:
         retroactive_reasoning = []
         for idx, state in enumerate(states):
             orig_action = actions[idx]
-            previous_action_list = self.all_previous_actions[: idx + 1]
+            previous_action_list = ["None"] + self.all_previous_actions[:idx]
             previous_actions = "\n".join(
                 [f"{i+1}. {a}" for i, a in enumerate(previous_action_list)]
             )
@@ -246,6 +232,10 @@ class StopActionFunc:
         return {"data_idx": data_idx, "stop_action": stop_output["answer"]}
 
 
+def run_helper(fn):
+    return fn.run()
+
+
 def run_reasoning(args, chat_model, obs_flags):
     reasoner_agent = get_retroactive_reasoner(args, chat_model, obs_flags)
 
@@ -255,18 +245,9 @@ def run_reasoning(args, chat_model, obs_flags):
     all_data = []
     for i, data in tqdm(enumerate(orig_data), total=len(orig_data)):
         actions = data["parsed_actions"]
-        states = [m["user"] for m in data["messages"] if "user" in m]
+        states = data["obs"]
         instruction = data["intent"]
-        with open(
-            "{}/render_states/render_{}.html".format(args.data_dir, data["task_id"]),
-            "r",
-        ) as f:
-            render_state = f.read()
-            soup = BeautifulSoup(render_state, "html.parser")
-            previous_actions = [
-                obv.get_text() for obv in soup.find_all("div", {"class": "prev_action"})
-            ]
-
+        previous_actions = data["action_descriptions"]
         reasoning_func = ReasoningFunc(
             actions, previous_actions, states, instruction, i, reasoner_agent
         )
@@ -275,13 +256,13 @@ def run_reasoning(args, chat_model, obs_flags):
 
     if args.n_jobs == 1:
         all_reasoning_outputs = []
-        for reasoning_func in all_reasoning_funcs:
+        for reasoning_func in tqdm(all_reasoning_funcs):
             all_reasoning_outputs.append(reasoning_func.run())
     else:
         with ProgressBar():
             delayed_results = []
             for reasoning_func in all_reasoning_funcs:
-                delayed_results.append(delayed(reasoning_func.run)())
+                delayed_results.append(delayed(run_helper)(reasoning_func))
             all_reasoning_outputs = compute(*delayed_results)
 
     for rout in all_reasoning_outputs:
@@ -312,8 +293,7 @@ def run_stop_action(args, chat_model, obs_flags):
     all_stop_action_funcs = []
     all_data = []
     for i, data in tqdm(enumerate(orig_data), total=len(orig_data)):
-        states = [m["user"] for m in data["messages"] if "user" in m]
-        last_observation = states[-1]
+        last_observation = data["obs"][-1]
         instruction = data["intent"]
         stop_action_func = StopActionFunc(
             last_observation, instruction, i, stop_action_agent
@@ -328,7 +308,7 @@ def run_stop_action(args, chat_model, obs_flags):
         with ProgressBar():
             delayed_results = []
             for stop_action_func in all_stop_action_funcs:
-                delayed_results.append(delayed(stop_action_func.run)())
+                delayed_results.append(delayed(run_helper)(stop_action_func))
             all_stop_outputs = compute(*delayed_results)
 
     for stop_output in all_stop_outputs:

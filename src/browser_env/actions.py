@@ -2,6 +2,7 @@
 Browser Env action space.
 Inspited by Farama-Foundation/miniwob-plusplus
 """
+
 import ast
 import random
 import re
@@ -109,9 +110,7 @@ class Action(TypedDict):
 
 
 @beartype
-def action2str(
-    action: Action, action_set_tag: str, semantic_element: str = ""
-) -> str:
+def action2str(action: Action, action_set_tag: str, semantic_element: str = "") -> str:
     """Return the string representation of an action
 
     sementic_element: the semantic information of the element
@@ -122,13 +121,17 @@ def action2str(
         match action["action_type"]:
             case ActionTypes.CLICK:
                 # [ID=X] xxxxx
-                action_str = f"click [{element_id}] where [{element_id}] is {semantic_element}"
+                action_str = (
+                    f"click [{element_id}] where [{element_id}] is {semantic_element}"
+                )
             case ActionTypes.TYPE:
                 text = "".join([_id2key[i] for i in action["text"]])
                 text = text.replace("\n", " ")
                 action_str = f"type [{element_id}] [{text}] where [{element_id}] is {semantic_element}"
             case ActionTypes.HOVER:
-                action_str = f"hover [{element_id}] where [{element_id}] is {semantic_element}"
+                action_str = (
+                    f"hover [{element_id}] where [{element_id}] is {semantic_element}"
+                )
             case ActionTypes.SCROLL:
                 action_str = f"scroll [{action['direction']}]"
             case ActionTypes.KEY_PRESS:
@@ -150,9 +153,7 @@ def action2str(
             case ActionTypes.NONE:
                 action_str = "none"
             case _:
-                raise ValueError(
-                    f"Unknown action type {action['action_type']}"
-                )
+                raise ValueError(f"Unknown action type {action['action_type']}")
     else:
         raise NotImplementedError(f"Unknown action set tag {action_set_tag}")
 
@@ -196,9 +197,7 @@ def action2create_function(action: Action) -> str:
         case ActionTypes.CLICK:
             args = []
             args.append(f"element_id={repr(action['element_id'])}")
-            args.append(
-                f"element_role={repr(_id2role[action['element_role']])}"
-            )
+            args.append(f"element_role={repr(_id2role[action['element_role']])}")
             args.append(f"element_name={repr(action['element_name'])}")
             args.append(f"pw_code={repr(action['pw_code'])}")
             args_str = ", ".join(args)
@@ -206,9 +205,7 @@ def action2create_function(action: Action) -> str:
         case ActionTypes.HOVER:
             args = []
             args.append(f"element_id={repr(action['element_id'])}")
-            args.append(
-                f"element_role={repr(_id2role[action['element_role']])}"
-            )
+            args.append(f"element_role={repr(_id2role[action['element_role']])}")
             args.append(f"element_name={repr(action['element_name'])}")
             args.append(f"pw_code={repr(action['pw_code'])}")
             args_str = ", ".join(args)
@@ -218,9 +215,7 @@ def action2create_function(action: Action) -> str:
             text = "".join(map(lambda x: _id2key[x], action["text"]))
             args.append(f"text={repr(text)}")
             args.append(f"element_id={repr(action['element_id'])}")
-            args.append(
-                f"element_role={repr(_id2role[action['element_role']])}"
-            )
+            args.append(f"element_role={repr(_id2role[action['element_role']])}")
             args.append(f"element_name={repr(action['element_name'])}")
             args.append(f"pw_code={repr(action['pw_code'])}")
             args_str = ", ".join(args)
@@ -291,7 +286,9 @@ def is_equivalent(a: Action, b: Action) -> bool:
             return np.allclose(a["coords"], b["coords"])
         case ActionTypes.KEYBOARD_TYPE:
             return a["text"] == b["text"]
-        case ActionTypes.CLICK | ActionTypes.HOVER | ActionTypes.TYPE:  # TODO: can be further optimized
+        case (
+            ActionTypes.CLICK | ActionTypes.HOVER | ActionTypes.TYPE
+        ):  # TODO: can be further optimized
             if a["element_id"] and b["element_id"]:
                 return a["element_id"] == b["element_id"]
             elif a["element_role"] and b["element_role"]:
@@ -331,8 +328,7 @@ _key2id: dict[str, int] = {
 }
 _id2key: list[str] = sorted(_key2id, key=_key2id.get)  # type: ignore[arg-type]
 _role2id: dict[RolesType, int] = {
-    cast(RolesType, role): i
-    for i, role in enumerate(chain(ROLES, SPECIAL_LOCATORS))
+    cast(RolesType, role): i for i, role in enumerate(chain(ROLES, SPECIAL_LOCATORS))
 }
 _id2role: list[RolesType] = sorted(_role2id, key=_role2id.get)  # type: ignore[arg-type]
 
@@ -340,9 +336,7 @@ _id2role: list[RolesType] = sorted(_role2id, key=_role2id.get)  # type: ignore[a
 def _keys2ids(keys: list[int | str] | str) -> list[int]:
     return list(
         map(
-            lambda key: _key2id[str(key)]
-            if isinstance(key, str)
-            else int(key),
+            lambda key: _key2id[str(key)] if isinstance(key, str) else int(key),
             keys,
         )
     )
@@ -360,19 +354,13 @@ def get_action_space() -> spaces.Dict:
                 np.array([1.0, 1.0], dtype=np.float32),
             ),
             # element role is used for FOCUS_AND_CLICK and FOCUS_AND_TYPE
-            "element_role": spaces.Discrete(
-                len(ROLES) + len(SPECIAL_LOCATORS)
-            ),
+            "element_role": spaces.Discrete(len(ROLES) + len(SPECIAL_LOCATORS)),
             # element name is used with element role
             "element_name": spaces.Text(TEXT_MAX_LENGTH),
             "element_id": spaces.Text(TEXT_MAX_LENGTH),
             # text is only used for TYPE and FOCUS_AND_TYPE
             "text": spaces.MultiDiscrete(
-                [
-                    len(ASCII_CHARSET)
-                    + len(SPECIAL_KEYS)
-                    + len(FREQ_UNICODE_CHARSET)
-                ]
+                [len(ASCII_CHARSET) + len(SPECIAL_KEYS) + len(FREQ_UNICODE_CHARSET)]
                 * TYPING_MAX_LENGTH
             ),
             "page_number": spaces.Discrete(MAX_PAGE_NUMBER),
@@ -409,9 +397,7 @@ def create_random_action() -> Action:
         ),
         "nth": np.random.randint(MAX_ELEMENT_INDEX_IN_VIEWPORT),
         "element_id": str(np.random.randint(MAX_ELEMENT_ID)),
-        "key_comb": "+".join(
-            random.choices(SPECIAL_KEYS, k=np.random.randint(3))
-        ),
+        "key_comb": "+".join(random.choices(SPECIAL_KEYS, k=np.random.randint(3))),
         "direction": random.choice(["up", "down"]),
         "pw_code": "".join(
             random.choices(
@@ -448,7 +434,9 @@ def create_none_action() -> Action:
 @beartype
 def create_stop_action(answer: str) -> Action:
     action = create_none_action()
-    action.update({"action_type": ActionTypes.STOP, "answer": answer, "parsed_response": answer})
+    action.update(
+        {"action_type": ActionTypes.STOP, "answer": answer, "parsed_response": answer}
+    )
     return action
 
 
@@ -805,9 +793,7 @@ def execute_key_press(key: str, page: Page) -> None:
 
 async def aexecute_key_press(key: str, page: APage) -> None:
     """Press a key."""
-    if "Meta" in key and "Mac" not in await page.evaluate(
-        "navigator.platform"
-    ):
+    if "Meta" in key and "Mac" not in await page.evaluate("navigator.platform"):
         key = key.replace("Meta", "Control")
     await page.keyboard.press(key)
 
@@ -816,36 +802,28 @@ def execute_mouse_hover(left: float, top: float, page: Page) -> None:
     """Click at coordinates (left, top)."""
     viewport_size = page.viewport_size
     assert viewport_size
-    page.mouse.move(
-        left * viewport_size["width"], top * viewport_size["height"]
-    )
+    page.mouse.move(left * viewport_size["width"], top * viewport_size["height"])
 
 
 async def aexecute_mouse_hover(left: float, top: float, page: APage) -> None:
     """Click at coordinates (left, top)."""
     viewport_size = page.viewport_size
     assert viewport_size
-    await page.mouse.move(
-        left * viewport_size["width"], top * viewport_size["height"]
-    )
+    await page.mouse.move(left * viewport_size["width"], top * viewport_size["height"])
 
 
 def execute_mouse_click(left: float, top: float, page: Page) -> None:
     """Click at coordinates (left, top)."""
     viewport_size = page.viewport_size
     assert viewport_size
-    page.mouse.click(
-        left * viewport_size["width"], top * viewport_size["height"]
-    )
+    page.mouse.click(left * viewport_size["width"], top * viewport_size["height"])
 
 
 async def aexecute_mouse_click(left: float, top: float, page: APage) -> None:
     """Click at coordinates (left, top)."""
     viewport_size = page.viewport_size
     assert viewport_size
-    await page.mouse.click(
-        left * viewport_size["width"], top * viewport_size["height"]
-    )
+    await page.mouse.click(left * viewport_size["width"], top * viewport_size["height"])
 
 
 def execute_keyboard_type(text: str, page: Page) -> None:
@@ -895,9 +873,7 @@ async def aexecute_type(keys: list[int], page: APage) -> None:
     await page.keyboard.type(text)
 
 
-def execute_focus(
-    element_role: int, element_name: str, nth: int, page: Page
-) -> None:
+def execute_focus(element_role: int, element_name: str, nth: int, page: Page) -> None:
     """Click the specified DOM element."""
     element_role_str = _id2role[element_role]
     if page.viewport_size is None:
@@ -912,9 +888,7 @@ def execute_focus(
             case "placeholder":
                 locators = frame.get_by_placeholder(element_name)
             case _:
-                locators = frame.get_by_role(
-                    role=element_role_str, name=element_name
-                )
+                locators = frame.get_by_role(role=element_role_str, name=element_name)
         for locator_idx in range(locators.count()):
             locator = locators.nth(locator_idx)
             if is_in_viewport(locator, page.viewport_size):
@@ -948,9 +922,7 @@ async def aexecute_focus(
             case "placeholder":
                 locators = frame.get_by_placeholder(element_name)
             case _:
-                locators = frame.get_by_role(
-                    role=element_role_str, name=element_name
-                )
+                locators = frame.get_by_role(role=element_role_str, name=element_name)
         for locator_idx in range(await locators.count()):
             locator = locators.nth(locator_idx)
             if await async_is_in_viewport(locator, page.viewport_size):
@@ -977,9 +949,7 @@ def locate(locator_calls: list[ParsedPlaywrightCode], page: Page) -> Locator:
     return locator  # type: ignore[return-value]
 
 
-async def alocate(
-    locator_calls: list[ParsedPlaywrightCode], page: APage
-) -> ALocator:
+async def alocate(locator_calls: list[ParsedPlaywrightCode], page: APage) -> ALocator:
     locator = page
     for call in locator_calls:
         function_name = call["function_name"]
@@ -1157,9 +1127,7 @@ def execute_action(
                 # [shuyanzh], don't support action args and kwargs now
                 execute_playwright_hover(locator_code=locator_code, page=page)
             else:
-                raise NotImplementedError(
-                    "No proper locator found for hover action"
-                )
+                raise NotImplementedError("No proper locator found for hover action")
         case ActionTypes.TYPE:
             if action["element_id"]:
                 element_id = action["element_id"]
@@ -1177,13 +1145,9 @@ def execute_action(
                 locator_code = parsed_code[:-1]
                 text = parsed_code[-1]["arguments"][0]
                 # [shuyanzh], don't support action args and kwargs now
-                execute_playwright_type(
-                    text=text, locator_code=locator_code, page=page
-                )
+                execute_playwright_type(text=text, locator_code=locator_code, page=page)
             else:
-                raise NotImplementedError(
-                    "No proper locator found for type action"
-                )
+                raise NotImplementedError("No proper locator found for type action")
 
         case ActionTypes.PAGE_FOCUS:
             page = browser_ctx.pages[action["page_number"]]
@@ -1245,13 +1209,9 @@ async def aexecute_action(
             await aexecute_key_press(keys, page)
 
         case ActionTypes.MOUSE_CLICK:
-            await aexecute_mouse_click(
-                action["coords"][0], action["coords"][1], page
-            )
+            await aexecute_mouse_click(action["coords"][0], action["coords"][1], page)
         case ActionTypes.MOUSE_HOVER:
-            await aexecute_mouse_hover(
-                action["coords"][0], action["coords"][1], page
-            )
+            await aexecute_mouse_hover(action["coords"][0], action["coords"][1], page)
         case ActionTypes.KEYBOARD_TYPE:
             await aexecute_type(action["text"], page)
 
@@ -1270,9 +1230,7 @@ async def aexecute_action(
                 parsed_code = parse_playwright_code(action["pw_code"])
                 locator_code = parsed_code[:-1]
                 # [shuyanzh], don't support action args and kwargs now
-                await aexecute_playwright_click(
-                    locator_code=locator_code, page=page
-                )
+                await aexecute_playwright_click(locator_code=locator_code, page=page)
             else:
                 raise ValueError("No proper locator found for click action")
         case ActionTypes.HOVER:
@@ -1287,13 +1245,9 @@ async def aexecute_action(
                 parsed_code = parse_playwright_code(action["pw_code"])
                 locator_code = parsed_code[:-1]
                 # [shuyanzh], don't support action args and kwargs now
-                await aexecute_playwright_hover(
-                    locator_code=locator_code, page=page
-                )
+                await aexecute_playwright_hover(locator_code=locator_code, page=page)
             else:
-                raise NotImplementedError(
-                    "No proper locator found for hover action"
-                )
+                raise NotImplementedError("No proper locator found for hover action")
         case ActionTypes.TYPE:
             if action["element_id"]:
                 raise NotImplementedError
@@ -1312,9 +1266,7 @@ async def aexecute_action(
                     text=text, locator_code=locator_code, page=page
                 )
             else:
-                raise NotImplementedError(
-                    "No proper locator found for type action"
-                )
+                raise NotImplementedError("No proper locator found for type action")
 
         case ActionTypes.PAGE_FOCUS:
             page = browser_ctx.pages[action["page_number"]]
@@ -1362,9 +1314,7 @@ async def aexecute_action(
 def parse_playwright_code(code: str) -> list[ParsedPlaywrightCode]:
     # extract function calls
     if not code.startswith("page."):
-        raise ValueError(
-            f'Playwright action must start with "page.", but got {code}'
-        )
+        raise ValueError(f'Playwright action must start with "page.", but got {code}')
 
     regex = r"\.(?![^\(\)]*\))"
     chain = re.split(regex, code)[1:]
@@ -1382,8 +1332,7 @@ def parse_playwright_code(code: str) -> list[ParsedPlaywrightCode]:
                     for arg in node.args
                 ]
                 keywords = {
-                    str(kw.arg): ast.literal_eval(kw.value)
-                    for kw in node.keywords
+                    str(kw.arg): ast.literal_eval(kw.value) for kw in node.keywords
                 }
                 funcs.append(
                     ParsedPlaywrightCode(
@@ -1398,10 +1347,7 @@ def parse_playwright_code(code: str) -> list[ParsedPlaywrightCode]:
         if len(funcs) != 1:
             raise ValueError(f"Fail to parse {item} in {code}")
 
-        if (
-            funcs[0]["function_name"]
-            not in PLAYWRIGHT_LOCATORS + PLAYWRIGHT_ACTIONS
-        ):
+        if funcs[0]["function_name"] not in PLAYWRIGHT_LOCATORS + PLAYWRIGHT_ACTIONS:
             raise ValueError(
                 f"Invalid playwright code {item}, ",
                 f"the function needs to be one of {PLAYWRIGHT_LOCATORS + PLAYWRIGHT_ACTIONS}",
@@ -1499,6 +1445,109 @@ def create_playwright_action(playwright_code: str) -> Action:
 
 
 @beartype
+def create_bgym_action(action_str: str) -> str:
+    """Convert from the webarena action space to the bgym action space. Lame, but needs to be done.
+    The bgym action space is defined as follows:
+    noop(wait_ms: float = 1000)
+    report_infeasible(reason: str)
+    send_msg_to_user(text: str)
+    click(bid: str, button: Literal['left', 'middle', 'right'] = 'left', modifiers: list[typing.Literal['Alt', 'Control', 'ControlOrMeta', 'Meta', 'Shift']] = [])
+    hover(bid: str)
+    fill(bid: str, value: str)
+    keyboard_press(key: str)
+    scroll(delta_x: float, delta_y: float)
+    tab_focus(index: int)
+    new_tab()
+    tab_close()
+    go_back()
+    go_forward()
+    goto(url: str)
+    """
+    action_str = action_str.strip()
+    action = (
+        action_str.split("[")[0].strip()
+        if "[" in action_str
+        else action_str.split()[0].strip()
+    )
+    match action:
+        case "click":
+            match = re.search(r"click ?\[(\d+)\]", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid click action {action_str}")
+            element_id = match.group(1)
+            return "click('{}')".format(element_id)
+        case "hover":
+            match = re.search(r"hover ?\[(\d+)\]", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid hover action {action_str}")
+            element_id = match.group(1)
+            return "hover('{}')".format(element_id)
+        case "type":
+            # add default enter flag
+            if not (action_str.endswith("[0]") or action_str.endswith("[1]")):
+                action_str += " [1]"
+
+            match = re.search(r"type ?\[(\d+)\] ?\[(.+)\] ?\[(\d+)\]", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid type action {action_str}")
+            element_id, text, enter_flag = (
+                match.group(1),
+                match.group(2),
+                match.group(3),
+            )
+            if enter_flag == "1":
+                return "fill('{}', '{}')\nkeyboard_press('Enter')".format(
+                    element_id, text
+                )
+            else:
+                return "fill('{}', '{}')".format(element_id, text)
+
+            # deal with enter flag later
+        case "press":
+            match = re.search(r"press ?\[(.+)\]", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid press action {action_str}")
+            key_comb = match.group(1)
+            return "keyboard_press('{}')".format(key_comb)
+        case "scroll":
+            # up or down
+            match = re.search(r"scroll ?\[?(up|down)\]?", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid scroll action {action_str}")
+            direction = match.group(1)
+            return "scroll(0, 100)" if direction == "down" else "scroll(0, -100)"
+        case "goto":
+            match = re.search(r"goto ?\[(.+)\]", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid goto action {action_str}")
+            url = match.group(1)
+            return "goto('{}')".format(url)
+        case "new_tab":
+            return "new_tab()"
+        case "go_back":
+            return "go_back()"
+        case "go_forward":
+            return "go_forward()"
+        case "tab_focus":
+            match = re.search(r"tab_focus ?\[(\d+)\]", action_str)
+            if not match:
+                raise ActionParsingError(f"Invalid tab_focus action {action_str}")
+            page_number = int(match.group(1))
+            return "tab_focus({})".format(page_number)
+        case "close_tab":
+            return "tab_close()"
+        case "stop":  # stop answer
+            match = re.search(r"stop ?\[(.+)\]", action_str)
+            if not match:  # some tasks don't require an answer
+                answer = ""
+            else:
+                answer = match.group(1)
+            return "send_msg_to_user('{}')".format(answer)
+
+    raise ActionParsingError(f"Invalid action {action_str}")
+
+
+@beartype
 def create_id_based_action(action_str: str) -> Action:
     """Main function to return individual id based action"""
     action_str = action_str.strip()
@@ -1525,9 +1574,7 @@ def create_id_based_action(action_str: str) -> Action:
             if not (action_str.endswith("[0]") or action_str.endswith("[1]")):
                 action_str += " [1]"
 
-            match = re.search(
-                r"type ?\[(\d+)\] ?\[(.+)\] ?\[(\d+)\]", action_str
-            )
+            match = re.search(r"type ?\[(\d+)\] ?\[(.+)\] ?\[(\d+)\]", action_str)
             if not match:
                 raise ActionParsingError(f"Invalid type action {action_str}")
             element_id, text, enter_flag = (
@@ -1566,9 +1613,7 @@ def create_id_based_action(action_str: str) -> Action:
         case "tab_focus":
             match = re.search(r"tab_focus ?\[(\d+)\]", action_str)
             if not match:
-                raise ActionParsingError(
-                    f"Invalid tab_focus action {action_str}"
-                )
+                raise ActionParsingError(f"Invalid tab_focus action {action_str}")
             page_number = int(match.group(1))
             return create_page_focus_action(page_number)
         case "close_tab":
