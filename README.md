@@ -23,7 +23,7 @@ huggingface-cli download stanfordnlp/llama8b-nnetnav-wa
 huggingface-cli download stanfordnlp/llama8b-nnetnav-live
 ```
 
-> ⚠ **Legal Disclaimer**  
+> ⚠ **Disclaimer**  
 > By using these models, you acknowledge and accept that the models operates autonomously on live websites, making decisions and taking actions on your behalf. Some of these actions may not align with your intentions.  
 >  
 > **You assume full responsibility and liability** for any and all actions taken by the model, whether intended or unintended. The developers and contributors of this project are not responsible for any consequences, legal or otherwise, that may arise from its use.  
@@ -52,11 +52,13 @@ python src/run_agent.py \
 
 The script will prompt you to enter a URL and an instruction. After that, it will run the agent on the website and save the results in the specified directory.
 
-<video width="600" controls>
-  <source src="video.mp4" type="assets/output_teaser.mp4">
-  <source src="video.webm" type="assets/output_teaser.webm">
-  Your browser does not support the video tag.
-</video>
+<div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+    <img src="assets/output_0.gif" style="width: 400px; max-width: 100%; border-radius: 10px;">
+    <img src="assets/output_1.gif" style="width: 400px; max-width: 100%; border-radius: 10px;">
+    <img src="assets/output_2.gif" style="width: 400px; max-width: 100%; border-radius: 10px;">
+</div>
+
+
 
 
 If you want to generate your own synthetic demonstrations for websites, and train your own web agents, then read on!
