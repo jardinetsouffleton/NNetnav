@@ -272,10 +272,10 @@ Contributions are welcome! If you encounter any issues, feel free to open a GitH
 If you use NNetNav in your work, please cite us using the following BibTeX entry:
 
 ```bibtex
-@article{murty2024nnetscape,
+@article{murty2025nnetscape,
   title={NNetNav: Unsupervised Learning of Browser Agents Through Environment Interaction in the Wild},
   author={Murty, Shikhar and and Zhu, Hao and Bahdanau, Dzmitry and Manning, Christopher D},
   journal={arXiv preprint arXiv:2410.02907},
-  year={2024}
+  year={2025}
 }
 ```
