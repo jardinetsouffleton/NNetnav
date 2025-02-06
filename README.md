@@ -73,7 +73,9 @@ Our codebase uses [AgentLab](https://github.com/ServiceNow/AgentLab) , and so yo
 ```bash
 agentlab-xray
 ```
-
+<p align="center">
+  <img src="assets/agentlab_xray_example.png" width="500">
+</p>
 
 
 
