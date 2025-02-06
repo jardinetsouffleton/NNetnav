@@ -69,6 +69,11 @@ The script will prompt you to enter a URL and an instruction. After that, it wil
   </tr>
 </table>
 
+Our codebase uses [AgentLab](https://github.com/ServiceNow/AgentLab) , and so you can use `agentlab-xray` to visualize the behavior of the model by running:
+```bash
+agentlab-xray
+```
+
 
 
 
