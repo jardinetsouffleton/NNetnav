@@ -69,6 +69,13 @@ The script will prompt you to enter a URL and an instruction. After that, it wil
   </tr>
 </table>
 
+Our codebase uses [AgentLab](https://github.com/ServiceNow/AgentLab) , and so you can use `agentlab-xray` to visualize the behavior of the model by running:
+```bash
+agentlab-xray
+```
+<p align="center">
+  <img src="assets/agentlab_xray_example.png" width="500">
+</p>
 
 
 
@@ -265,10 +272,10 @@ Contributions are welcome! If you encounter any issues, feel free to open a GitH
 If you use NNetNav in your work, please cite us using the following BibTeX entry:
 
 ```bibtex
-@article{murty2024nnetscape,
+@article{murty2025nnetscape,
   title={NNetNav: Unsupervised Learning of Browser Agents Through Environment Interaction in the Wild},
   author={Murty, Shikhar and and Zhu, Hao and Bahdanau, Dzmitry and Manning, Christopher D},
   journal={arXiv preprint arXiv:2410.02907},
-  year={2024}
+  year={2025}
 }
 ```
