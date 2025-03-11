@@ -229,7 +229,7 @@ if __name__ == "__main__":
     val_outputs = [o for o in outputs if o["task_name"] in val_tasks]
     test_outputs = val_outputs
 
-    DATA_DUMP_DIR = "/Users/leo.boisvert/Downloads/NNetnav/datasets"
+    DATA_DUMP_DIR = "./NNetnav/datasets"
     os.makedirs(f"{DATA_DUMP_DIR}/{args.exp_name}", exist_ok=True)
 
     with open(
