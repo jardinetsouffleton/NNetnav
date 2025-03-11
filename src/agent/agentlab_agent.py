@@ -1,5 +1,5 @@
 """
-    Agent that is compatible with the BrowserGym / Agentlab framework.
+Agent that is compatible with the BrowserGym / Agentlab framework.
 """
 
 from dataclasses import dataclass, asdict
@@ -156,7 +156,7 @@ class ExplorationAgentFactory(GenericAgentArgs):
 
         agent = NNetNavExplorerAgent(
             action_set_tag=args.action_set_tag,
-            prune_at=[4, 8, 12, 16, 20, 24, 28, 32, 36, 40],
+            prune_at=[2],
             persona_str=self.persona_str,
             lm_config=llm_config,
             prompts={

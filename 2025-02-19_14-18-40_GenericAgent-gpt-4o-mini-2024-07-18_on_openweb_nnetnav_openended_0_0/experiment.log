@@ -1,0 +1,22 @@
+2025-02-19 14:18:40,857 - 93734 - browsergym.experiments.loop - INFO - Running experiment GenericAgent-gpt-4o-mini-2024-07-18_on_openweb_nnetnav_openended_0_0 in:
+  2025-02-19_14-18-40_GenericAgent-gpt-4o-mini-2024-07-18_on_openweb_nnetnav_openended_0_0
+2025-02-19 14:18:49,727 - 93734 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-02-19 14:18:50,208 - 93734 - browsergym.experiments.loop - INFO - Let's think step-by-step. I want to compare multiple destinations for a vacation. First, I will enter a departure city and a destination city. I will start by typing "Montreal" in the "Where from?" field. In summary, the next action I will perform is ```type [571] [Montreal] [1]```.
+
+action:
+fill('571', 'Montreal')
+keyboard_press('Enter')
+
+2025-02-19 14:18:54,913 - 93734 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-02-19 14:18:56,207 - 93734 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-02-19 14:18:56,677 - 93734 - browsergym.experiments.loop - INFO - Let's think step-by-step. Now that I have entered "Montreal" in the "Where from?" field, I need to specify the destination. I will type "Paris" into the "Where to?" combobox. 
+
+In summary, the next action I will perform is ```type [633] [Paris] [1]```.
+
+action:
+fill('633', 'Paris')
+keyboard_press('Enter')
+
+2025-02-19 14:19:01,481 - 93734 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-02-19 14:19:02,076 - 93734 - browsergym.experiments.loop - INFO - Saving summary info.
+2025-02-19 14:19:02,082 - 93734 - browsergym.experiments.loop - ERROR - Error while closing the environment in the finally block: : Connection closed while reading from the driver

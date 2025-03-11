@@ -28,7 +28,6 @@ from nnetnav_utils import make_dask_client
 from agentlab.llm.chat_api import (
     SelfHostedModelArgs,
     OpenRouterModelArgs,
-    TogetherAIModelArgs,
 )
 from agentlab.agents import dynamic_prompting as dp
 from agentlab.agents.generic_agent.generic_agent_prompt import GenericPromptFlags
@@ -75,7 +74,11 @@ def config():
     parser = argparse.ArgumentParser(
         description="Run Postprocessing for nnetnav trajectories"
     )
-    parser.add_argument("--data_dir", type=str, default="")
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="/Users/leo.boisvert/Downloads/NNetnav/trajectories",
+    )
 
     # agent config
     parser.add_argument(
@@ -90,7 +93,7 @@ def config():
     parser.add_argument("--agent_type", type=str, default="prompt")
     # lm config
     parser.add_argument("--provider", type=str, default="openai")
-    parser.add_argument("--model", type=str, default="gpt-4-turbo")
+    parser.add_argument("--model", type=str, default="gpt-4o")
     parser.add_argument("--mode", type=str, default="chat")
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=0.9)
@@ -119,7 +122,7 @@ def config():
     parser.add_argument(
         "--environment_type",
         type=str,
-        default="webarena",
+        default="openweb",
         choices=["webarena", "miniwob", "openweb"],
     )
     parser.add_argument(
@@ -128,7 +131,7 @@ def config():
         default="all",
         choices=["add_stop_action", "retroactive_reasoning", "all"],
     )
-    parser.add_argument("--use_openrouter", action="store_true")
+    parser.add_argument("--use_openrouter", action="store_true", default=True)
     parser.add_argument("--use_together_ai", action="store_true")
     parser.add_argument("--n_jobs", type=int, default=1)
     args = parser.parse_args()

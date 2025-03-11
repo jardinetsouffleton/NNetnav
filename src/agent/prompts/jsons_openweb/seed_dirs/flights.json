@@ -1,0 +1,9 @@
+{
+    "sites": ["google_flights"],
+    "start_url": "https://www.google.com/flights",
+    "geolocation": null,
+    "require_reset": false,
+    "storage_state": null,
+    "intent": "n/a",
+    "env_type": "open_ended"
+  }
