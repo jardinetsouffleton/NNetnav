@@ -1,14 +1,15 @@
 """
-    New version of convert_to_sft.py that uses agentlab infra
+New version of convert_to_sft.py that uses agentlab infra
 """
 
 import argparse
 import json
 import os
-from browser_env.env_config import URL_MAPPINGS
+
+# from browser_env.env_config import URL_MAPPINGS
 from agentlab.llm.llm_utils import count_tokens
 from tqdm import tqdm
-from llms.tokenizers import Tokenizer
+from transformers import AutoTokenizer  # type: ignore
 
 system_chat_message_webarena = {
     "role": "system",
@@ -60,10 +61,10 @@ def main(
 ):
     instruction_template = json.load(open(prompt_path, "r"))["template"]
     if os.path.exists(
-        "{}/iltered_parsed_with_retroactive_stop_action.json".format(nnetnav_dem_dir)
+        "{}/filtered_parsed_with_retroactive_stop_action.json".format(nnetnav_dem_dir)
     ):
         with open(
-            "{}/iltered_parsed_with_retroactive_stop_action.json".format(
+            "{}/filtered_parsed_with_retroactive_stop_action.json".format(
                 nnetnav_dem_dir
             ),
             "r",
@@ -78,7 +79,8 @@ def main(
         system_chat_message = system_chat_message_openweb
 
     all_instruction_tuning_examples = []
-    tokenizer = Tokenizer(provider="vllm", model_name=model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # (provider="vllm", model_name=model_name)
     for demonstration in tqdm(demonstrations):
         # if the length of the intent is more than 100 words, skip
         if len(demonstration["intent"].split()) > 100:
@@ -101,11 +103,13 @@ def main(
                 )
             else:
                 actions.append(with_reasoning)
-
-        actions.append(demonstration["stop_action"])
+        if "stop_action" in demonstration:
+            actions.append(demonstration["stop_action"])
         previous_actions = ["None"] + demonstration["action_descriptions"]
         previous_actions_curr = []
         for idx, obs in enumerate(observations):
+            if idx >= len(actions):
+                break
             webpage = obs
             # use a tokenizer to make the size of obs <= 16k, since this is our context window limit
             first_line = obs.split("\n")[0]
@@ -173,13 +177,14 @@ if __name__ == "__main__":
         "--nnetnav_dem_dir",
         type=str,
         help="Directory where parsed nnetnav demonstrations are stored",
+        default="/Users/leo.boisvert/Downloads/NNetnav/trajectories",
     )
     parser.add_argument("--train_on", type=str, default="all", nargs="+")
 
     parser.add_argument(
         "--environment_type",
         type=str,
-        default="webarena",
+        default="openweb",
         choices=["webarena", "openweb"],
         help="Environment type, webarena or openweb",
     )
@@ -224,7 +229,7 @@ if __name__ == "__main__":
     val_outputs = [o for o in outputs if o["task_name"] in val_tasks]
     test_outputs = val_outputs
 
-    DATA_DUMP_DIR = "/u/scr/smurty/agents-with-exploration/public/nnetnav_datasets"
+    DATA_DUMP_DIR = "/Users/leo.boisvert/Downloads/NNetnav/datasets"
     os.makedirs(f"{DATA_DUMP_DIR}/{args.exp_name}", exist_ok=True)
 
     with open(
