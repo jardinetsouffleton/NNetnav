@@ -138,10 +138,11 @@ def config():
     parser.add_argument("--context_length", type=int, default=0)
     parser.add_argument("--max_tokens", type=int, default=384)
     parser.add_argument("--stop_token", type=str, default=None)
+
     parser.add_argument(
         "--seed_dir",
         type=str,
-        default="/Users/leo.boisvert/Downloads/NNetnav/src/agent/prompts/jsons_openweb/seed_dirs",
+        default="./src/agent/prompts/jsons_openweb/seed_dirs",
     )
     parser.add_argument("--exploration_size_per_seed", type=int, default=2)
     parser.add_argument(
@@ -183,6 +184,12 @@ def config():
 
     parser.add_argument(
         "--n_jobs", type=int, default=1, help="Number of parallel jobs to run"
+    )
+    # in real life, use [4, 8, 12, 16, ..., 40]
+    parser.add_argument(
+        "--prune_at",
+        type=list,
+        default=[2],
     )
 
     args = parser.parse_args()

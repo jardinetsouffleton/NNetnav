@@ -156,7 +156,7 @@ class ExplorationAgentFactory(GenericAgentArgs):
 
         agent = NNetNavExplorerAgent(
             action_set_tag=args.action_set_tag,
-            prune_at=[2],
+            prune_at=args.prune_at,
             persona_str=self.persona_str,
             lm_config=llm_config,
             prompts={

@@ -1,6 +1,6 @@
 {
-    "sites": ["google_flights"],
-    "start_url": "https://www.google.com/flights",
+    "sites": ["google_scholar"],
+    "start_url": "https://scholar.google.ca/",
     "geolocation": null,
     "require_reset": false,
     "storage_state": null,
