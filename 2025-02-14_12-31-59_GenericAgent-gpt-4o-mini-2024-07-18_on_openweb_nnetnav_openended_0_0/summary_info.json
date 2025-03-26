@@ -1,0 +1,10 @@
+{
+    "n_steps": 0,
+    "cum_reward": 0,
+    "cum_raw_reward": 0,
+    "err_msg": "Exception uncaught by agent or environment in task openweb_nnetnav_openended_0.\nAttributeError:\n'NNetNavExplorerAgent' object has no attribute 'prompt_constructor'",
+    "stack_trace": "Traceback (most recent call last):\n  File \"/Users/leo.boisvert/micromamb/envs/nnetnav/lib/python3.12/site-packages/browsergym/experiments/loop.py\", line 253, in run\n    action = step_info.from_action(agent)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/leo.boisvert/micromamb/envs/nnetnav/lib/python3.12/site-packages/browsergym/experiments/loop.py\", line 427, in from_action\n    self.action, self.agent_info = agent.get_action(self.obs.copy())\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/leo.boisvert/Downloads/NNetnav/src/agent/agentlab_agent.py\", line 432, in get_action\n    self.get_action_description_helper(obs, ans_dict[\"webarena_action_ds\"])\n  File \"/Users/leo.boisvert/Downloads/NNetnav/src/agent/agentlab_agent.py\", line 302, in get_action_description_helper\n    action_splitter = self.prompt_constructor[\"exploration\"].instruction[\n                      ^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'NNetNavExplorerAgent' object has no attribute 'prompt_constructor'\n",
+    "stats.cum_steps": 1,
+    "terminated": false,
+    "truncated": false
+}

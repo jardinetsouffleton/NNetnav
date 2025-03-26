@@ -47,9 +47,9 @@ from agentlab.experiments.launch_exp import find_incomplete, run_experiments
 from agentlab.llm.chat_api import (
     SelfHostedModelArgs,
     OpenRouterModelArgs,
-    TogetherAIModelArgs,
+    # TogetherAIModelArgs, # Not implemented
 )
-
+from agentlab.llm.llm_configs import CHAT_MODEL_ARGS_DICT
 
 LOG_FOLDER = "log_files"
 Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
@@ -113,7 +113,7 @@ def config():
     parser.add_argument("--out_dir", type=str, default="")
 
     # agent config
-    parser.add_argument("--use_personas", action="store_true")
+    parser.add_argument("--use_personas", default=True, action="store_true")
     parser.add_argument("--agent_type", type=str, default="prompt")
     parser.add_argument(
         "--parsing_failure_th",
@@ -138,8 +138,13 @@ def config():
     parser.add_argument("--context_length", type=int, default=0)
     parser.add_argument("--max_tokens", type=int, default=384)
     parser.add_argument("--stop_token", type=str, default=None)
-    parser.add_argument("--seed_dir", type=str, default="")
-    parser.add_argument("--exploration_size_per_seed", type=int, default=1)
+
+    parser.add_argument(
+        "--seed_dir",
+        type=str,
+        default="./src/agent/prompts/jsons_openweb/seed_dirs",
+    )
+    parser.add_argument("--exploration_size_per_seed", type=int, default=2)
     parser.add_argument(
         "--max_retry",
         type=int,
@@ -166,7 +171,7 @@ def config():
     parser.add_argument(
         "--environment_type",
         type=str,
-        default="webarena",
+        default="openweb",
         choices=["webarena", "miniwob", "openweb"],
     )
 
@@ -179,6 +184,12 @@ def config():
 
     parser.add_argument(
         "--n_jobs", type=int, default=1, help="Number of parallel jobs to run"
+    )
+    # in real life, use [4, 8, 12, 16, ..., 40]
+    parser.add_argument(
+        "--prune_at",
+        type=list,
+        default=[2],
     )
 
     args = parser.parse_args()
@@ -208,14 +219,14 @@ def run_nnetnav_exploration_bgym(args):
             for config_file in config_list:
                 all_instructions.append(("n/a", config_file))
 
-        chat_model_args = TogetherAIModelArgs(
-            model_name=f"{args.model}-Turbo",
-            max_total_tokens=16_384,
-            max_input_tokens=16_384 - 512,
-            max_new_tokens=512,
-            temperature=args.temperature,
-        )
-        # chat_model_args = CHAT_MODEL_ARGS_DICT["openai/gpt-4o-mini-2024-07-18"]
+        # chat_model_args = OpenRouterModelArgs(
+        #     model_name=f"{args.model}-Turbo",
+        #     max_total_tokens=16_384,
+        #     max_input_tokens=16_384 - 512,
+        #     max_new_tokens=512,
+        #     temperature=args.temperature,
+        # )
+        chat_model_args = CHAT_MODEL_ARGS_DICT["openai/gpt-4o-mini-2024-07-18"]
         all_configs = _get_all_data(all_instructions)
         if args.use_personas:
             if args.environment_type == "webarena":

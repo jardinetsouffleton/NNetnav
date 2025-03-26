@@ -721,7 +721,7 @@ class NNetscapeNavigator:
         config_json = json.load(open(config_file))
         config_file_dir = os.path.dirname(config_file)
         intent = config_json["intent"]
-        env_type = config_json.get("env_type", "webarena")
+        env_type = config_json.get("env_type", "openweb")
         if env_type == "webarena":
             env_type = "webarena"
             config_file_tmp = setup_config(env, config_file)

@@ -1,5 +1,5 @@
 """
-    Same as postprocess_outputs.py but with the addition of the agentlab specific postprocessing functions.
+Same as postprocess_outputs.py but with the addition of the agentlab specific postprocessing functions.
 """
 
 import os
@@ -64,7 +64,7 @@ def get_action_description_helper(obs, action):
     return action_str
 
 
-def get_all_data(exp_dir):
+def get_all_data(exp_dir, indices):
     previous_steps = [
         pickle.load(gzip.open(f, "rb")) for f in glob.glob(f"{exp_dir}/step_*.gz")
     ]
@@ -114,7 +114,7 @@ def get_all_data(exp_dir):
             )
         else:
             action_descriptions.append("None")
-        if i > 0 and i % 4 == 0:
+        if i > 0 and i in indices:
             try:
                 extra_info = step2action[i].agent_info.extra_info
                 if "reward" in extra_info and int(extra_info["reward"]["answer"]) >= 4:
@@ -140,7 +140,7 @@ def get_all_data(exp_dir):
     return all_data
 
 
-def postprocess_outputs(orig_dir):
+def postprocess_outputs(orig_dir, indices):
     """
     We will also save all the action descriptions
     """
@@ -150,7 +150,7 @@ def postprocess_outputs(orig_dir):
     all_data = []
     for exp_dir in tqdm(all_episodes):
         try:
-            curr_data = get_all_data(exp_dir)
+            curr_data = get_all_data(exp_dir, indices)
             all_data += curr_data
         except Exception as e:
             print(f"Error in {exp_dir}: {e}")
@@ -163,7 +163,11 @@ def postprocess_outputs(orig_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--orig_dir", type=str, default="")
+    parser.add_argument(
+        "--orig_dir",
+        type=str,
+        default="/Users/leo.boisvert/Downloads/NNetnav/trajectories",
+    )
     args = parser.parse_args()
     orig_dir = args.orig_dir
-    postprocess_outputs(orig_dir)
+    postprocess_outputs(orig_dir, indices=[2])

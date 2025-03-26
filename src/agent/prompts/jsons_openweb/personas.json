@@ -1388,5 +1388,11 @@
             "persona": "Photography Buff",
             "description": "Selects flights to picturesque destinations for capturing stunning landscapes."
         }
+    ],
+    "google_scholar":[
+        {
+            "persona": "AI security researcher",
+            "description": "Serious researcher who uses Google Scholar to find the latest papers on AI security."
+        }
     ]
 }

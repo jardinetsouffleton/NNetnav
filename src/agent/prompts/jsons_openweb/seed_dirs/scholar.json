@@ -1,0 +1,9 @@
+{
+    "sites": ["google_scholar"],
+    "start_url": "https://scholar.google.ca/",
+    "geolocation": null,
+    "require_reset": false,
+    "storage_state": null,
+    "intent": "n/a",
+    "env_type": "open_ended"
+  }

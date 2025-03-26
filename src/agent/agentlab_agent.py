@@ -1,5 +1,5 @@
 """
-    Agent that is compatible with the BrowserGym / Agentlab framework.
+Agent that is compatible with the BrowserGym / Agentlab framework.
 """
 
 from dataclasses import dataclass, asdict
@@ -156,7 +156,7 @@ class ExplorationAgentFactory(GenericAgentArgs):
 
         agent = NNetNavExplorerAgent(
             action_set_tag=args.action_set_tag,
-            prune_at=[4, 8, 12, 16, 20, 24, 28, 32, 36, 40],
+            prune_at=args.prune_at,
             persona_str=self.persona_str,
             lm_config=llm_config,
             prompts={
@@ -299,9 +299,9 @@ class NNetNavExplorerAgent(BrowserGymAgent):
                 bid_dict[o["browsergym_id"]] = o["name"]["value"]
             else:
                 bid_dict[o["browsergym_id"]] = ""
-        action_splitter = self.prompt_constructor["exploration"].instruction[
-            "meta_data"
-        ]["action_splitter"]
+        action_splitter = self.prompts["exploration"].instruction["meta_data"][
+            "action_splitter"
+        ]
         action_str = get_action_description_bgym(
             action,
             bid_dict,
